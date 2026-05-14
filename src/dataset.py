@@ -1,0 +1,265 @@
+"""
+dataset.py — MONAI Dataset and DataLoader setup for AEA segmentation.
+
+This module defines:
+  - get_transforms()    : MONAI transform pipelines for train / val / test
+  - get_dataloaders()   : Build DataLoaders from JSON split manifests
+  - AEADataModule       : Convenience wrapper that loads all three splits at once
+"""
+
+import sys
+from pathlib import Path
+from typing import Optional
+
+from monai import transforms as T
+from monai.data import (
+    CacheDataset,
+    DataLoader,
+    PersistentDataset,
+    pad_list_data_collate,
+)
+from loguru import logger
+
+sys.path.insert(0, str(Path(__file__).parent.parent))
+from config import TRAIN_CONFIG, MODEL_CONFIG, HU_MIN, HU_MAX, NUM_CLASSES
+from src.utils import load_json
+
+
+# ── Transforms ────────────────────────────────────────────────────────────────
+
+def get_transforms(mode: str = "train") -> T.Compose:
+    """
+    Build MONAI transform pipelines for each data split.
+
+    The pipeline differs between training (with augmentation) and
+    validation/test (no augmentation, full-volume sliding window).
+
+    Args:
+        mode: One of "train", "val", or "test".
+
+    Returns:
+        A MONAI Compose transform that processes a dict with keys
+        "image" and "mask" (for train/val) or just "image" (for inference).
+    """
+    patch_size   = TRAIN_CONFIG["patch_size"]
+    num_samples  = TRAIN_CONFIG["num_samples"]
+    pos_ratio    = TRAIN_CONFIG["pos_sample_ratio"]
+    neg_ratio    = TRAIN_CONFIG["neg_sample_ratio"]
+
+    # ── Shared base transforms (always applied) ────────────────────────────────
+    base = [
+        # Load NIfTI image and mask from file paths stored in the dict
+        T.LoadImaged(keys=["image", "mask"], image_only=False),
+
+        # Ensure channel dimension exists: (H, W, D) → (1, H, W, D)
+        T.EnsureChannelFirstd(keys=["image", "mask"]),
+
+        # Make sure array types are correct
+        T.EnsureTyped(keys=["image", "mask"]),
+
+        # Reorient to RAS+ standard orientation (Right-Anterior-Superior)
+        T.Orientationd(keys=["image", "mask"], axcodes="RAS"),
+
+        # Resample to consistent 0.4mm isotropic spacing
+        # (data is already at 0.4mm, but this guards against any case-level variation)
+        T.Spacingd(
+            keys       = ["image", "mask"],
+            pixdim     = (0.4, 0.4, 0.4),
+            mode       = ("bilinear", "nearest"),
+        ),
+
+        # Clip and normalise CBCT Hounsfield Unit values to [0, 1]
+        T.ScaleIntensityRanged(
+            keys    = ["image"],
+            a_min   = HU_MIN,
+            a_max   = HU_MAX,
+            b_min   = 0.0,
+            b_max   = 1.0,
+            clip    = True,
+        ),
+    ]
+
+    if mode == "train":
+        # ── Training-specific transforms ───────────────────────────────────────
+        augmentation = [
+            # Crop patches with foreground oversampling:
+            # pos_ratio:neg_ratio = 1:1 means half the patches contain AEA voxels
+            T.RandCropByPosNegLabeld(
+                keys        = ["image", "mask"],
+                label_key   = "mask",
+                spatial_size= patch_size,
+                pos         = pos_ratio,
+                neg         = neg_ratio,
+                num_samples = num_samples,
+                image_key   = "image",
+                image_threshold = 0,
+            ),
+
+            # Random flips along each axis (AEA can be on either side)
+            T.RandFlipd(keys=["image", "mask"], prob=0.5, spatial_axis=0),
+            T.RandFlipd(keys=["image", "mask"], prob=0.5, spatial_axis=1),
+            T.RandFlipd(keys=["image", "mask"], prob=0.5, spatial_axis=2),
+
+            # Random 90-degree rotations
+            T.RandRotate90d(keys=["image", "mask"], prob=0.5, max_k=3),
+
+            # Random intensity shift and scale to simulate scanner variability
+            T.RandScaleIntensityd(keys=["image"], factors=0.1,  prob=0.5),
+            T.RandShiftIntensityd(keys=["image"], offsets=0.1,  prob=0.5),
+
+            # Convert to PyTorch tensors
+            T.ToTensord(keys=["image", "mask"]),
+        ]
+        return T.Compose(base + augmentation)
+
+    else:
+        # ── Validation / Test transforms (no augmentation) ─────────────────────
+        val_transforms = [
+            T.ToTensord(keys=["image", "mask"]),
+        ]
+        return T.Compose(base + val_transforms)
+
+
+def get_inference_transforms() -> T.Compose:
+    """
+    Minimal transform pipeline for inference on a new unseen scan.
+    Does not expect a mask key.
+    """
+    return T.Compose([
+        T.LoadImaged(keys=["image"], image_only=False),
+        T.EnsureChannelFirstd(keys=["image"]),
+        T.EnsureTyped(keys=["image"]),
+        T.Orientationd(keys=["image"], axcodes="RAS"),
+        T.Spacingd(keys=["image"], pixdim=(0.4, 0.4, 0.4), mode="bilinear"),
+        T.ScaleIntensityRanged(
+            keys  = ["image"],
+            a_min = HU_MIN,
+            a_max = HU_MAX,
+            b_min = 0.0,
+            b_max = 1.0,
+            clip  = True,
+        ),
+        T.ToTensord(keys=["image"]),
+    ])
+
+
+# ── DataLoaders ────────────────────────────────────────────────────────────────
+
+def get_dataloader(
+    manifest     : list[dict],
+    mode         : str,
+    cache_dir    : Optional[Path] = None,
+    cache_rate   : float = 1.0,
+    num_workers  : int = 4,
+) -> DataLoader:
+    """
+    Build a MONAI DataLoader for a given manifest and mode.
+
+    Uses CacheDataset (loads all data into RAM) if cache_rate=1.0, which is
+    recommended for small datasets like ours (130 cases fit comfortably in
+    ~16GB RAM). On Colab, set cache_rate=0.5 if memory is tight.
+
+    Args:
+        manifest:    List of {"case_id", "image", "mask"} dicts.
+        mode:        "train", "val", or "test".
+        cache_dir:   If set, use PersistentDataset (cache to disk) instead.
+        cache_rate:  Fraction of data to cache in memory (CacheDataset only).
+        num_workers: Number of DataLoader worker processes.
+
+    Returns:
+        MONAI DataLoader ready for the training loop.
+    """
+    transforms  = get_transforms(mode)
+    batch_size  = TRAIN_CONFIG["batch_size"] if mode == "train" else 1
+    shuffle     = (mode == "train")
+
+    if cache_dir is not None:
+        # PersistentDataset caches preprocessed tensors to disk
+        # — useful on Colab where RAM is limited
+        cache_dir = Path(cache_dir) / mode
+        cache_dir.mkdir(parents=True, exist_ok=True)
+        dataset = PersistentDataset(
+            data        = manifest,
+            transform   = transforms,
+            cache_dir   = str(cache_dir),
+        )
+    else:
+        dataset = CacheDataset(
+            data        = manifest,
+            transform   = transforms,
+            cache_rate  = cache_rate,
+            num_workers = num_workers,
+        )
+
+    loader = DataLoader(
+        dataset    = dataset,
+        batch_size = batch_size,
+        shuffle    = shuffle,
+        num_workers= num_workers,
+        pin_memory = True,
+        collate_fn = pad_list_data_collate,  # Handles variable-size patches
+    )
+
+    logger.info(
+        f"DataLoader [{mode}]: {len(dataset)} cases, "
+        f"batch_size={batch_size}, shuffle={shuffle}"
+    )
+    return loader
+
+
+# ── Convenience data module ────────────────────────────────────────────────────
+
+class AEADataModule:
+    """
+    Convenience wrapper that loads all three splits and exposes DataLoaders.
+
+    Usage:
+        dm = AEADataModule(splits_dir=SPLITS_DIR)
+        dm.setup()
+        for batch in dm.train_loader:
+            images = batch["image"]   # (B, 1, H, W, D)
+            masks  = batch["mask"]    # (B, 1, H, W, D)
+    """
+
+    def __init__(
+        self,
+        splits_dir  : Path,
+        cache_dir   : Optional[Path] = None,
+        cache_rate  : float = 1.0,
+        num_workers : int = 4,
+    ):
+        self.splits_dir  = Path(splits_dir)
+        self.cache_dir   = cache_dir
+        self.cache_rate  = cache_rate
+        self.num_workers = num_workers
+
+        self.train_loader = None
+        self.val_loader   = None
+        self.test_loader  = None
+
+    def setup(self) -> None:
+        """Load JSON manifests and create DataLoaders for all splits."""
+        train_manifest = load_json(self.splits_dir / "train.json")
+        val_manifest   = load_json(self.splits_dir / "val.json")
+        test_manifest  = load_json(self.splits_dir / "test.json")
+
+        logger.info(
+            f"Loaded splits: {len(train_manifest)} train / "
+            f"{len(val_manifest)} val / {len(test_manifest)} test"
+        )
+
+        self.train_loader = get_dataloader(
+            train_manifest, "train",
+            cache_dir=self.cache_dir, cache_rate=self.cache_rate,
+            num_workers=self.num_workers,
+        )
+        self.val_loader = get_dataloader(
+            val_manifest, "val",
+            cache_dir=self.cache_dir, cache_rate=self.cache_rate,
+            num_workers=self.num_workers,
+        )
+        self.test_loader = get_dataloader(
+            test_manifest, "test",
+            cache_dir=self.cache_dir, cache_rate=self.cache_rate,
+            num_workers=self.num_workers,
+        )
