@@ -63,13 +63,28 @@ def build_model(device: str, pretrained: bool = True) -> SwinUNETR:
     Returns:
         SwinUNETR model moved to the specified device.
     """
-    model = SwinUNETR(
-        img_size       = MODEL_CONFIG["img_size"],
+    # Build SwinUNETR with API compatibility across MONAI versions.
+    # MONAI 1.3.x uses 'img_size' as a keyword argument.
+    # MONAI 1.4+ changed the signature — img_size must be passed positionally.
+    # We try keyword first, then fall back to positional if it fails.
+    _kwargs = dict(
         in_channels    = MODEL_CONFIG["in_channels"],
         out_channels   = MODEL_CONFIG["out_channels"],
         feature_size   = MODEL_CONFIG["feature_size"],
         use_checkpoint = MODEL_CONFIG["use_checkpoint"],
-    ).to(device)
+    )
+    try:
+        model = SwinUNETR(
+            img_size = MODEL_CONFIG["img_size"],
+            **_kwargs,
+        ).to(device)
+    except TypeError:
+        # Newer MONAI: img_size is positional-only
+        logger.info("MONAI API change detected — passing img_size positionally.")
+        model = SwinUNETR(
+            MODEL_CONFIG["img_size"],
+            **_kwargs,
+        ).to(device)
 
     if pretrained:
         weights_path = SWINUNETR_DIR / "pretrained_swinunetr.pt"

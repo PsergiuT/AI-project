@@ -53,14 +53,17 @@ def _get_model():
 
     from monai.networks.nets import SwinUNETR
 
-    device = "cuda" if torch.cuda.is_available() else "cpu"
-    model  = SwinUNETR(
-        img_size       = MODEL_CONFIG["img_size"],
+    device  = "cuda" if torch.cuda.is_available() else "cpu"
+    _kwargs = dict(
         in_channels    = MODEL_CONFIG["in_channels"],
         out_channels   = MODEL_CONFIG["out_channels"],
         feature_size   = MODEL_CONFIG["feature_size"],
-        use_checkpoint = False,  # No gradient checkpointing at inference
-    ).to(device)
+        use_checkpoint = False,
+    )
+    try:
+        model = SwinUNETR(img_size=MODEL_CONFIG["img_size"], **_kwargs).to(device)
+    except TypeError:
+        model = SwinUNETR(MODEL_CONFIG["img_size"], **_kwargs).to(device)
 
     best_ckpt = SWINUNETR_DIR / TRAIN_CONFIG["best_model_name"]
     if not best_ckpt.exists():
