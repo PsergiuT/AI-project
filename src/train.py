@@ -244,6 +244,11 @@ def train(
         best_dice   = checkpoint.get("best_dice", -1.0)
         logger.info(f"Resumed from {resume_from} (epoch {start_epoch})")
 
+    # ── AMP scaler — halves VRAM by computing in float16 ──────────────────────
+    use_amp = (device == "cuda")
+    scaler  = torch.cuda.amp.GradScaler(enabled=use_amp)
+    logger.info(f"Automatic Mixed Precision (AMP): {'enabled' if use_amp else 'disabled'}")
+
     # ── Metric tracker ─────────────────────────────────────────────────────────
     val_metrics = SegmentationMetrics(device=device)
     history     = {"train_loss": [], "val_dice": [], "val_iou": [], "val_hd95": []}
@@ -269,13 +274,20 @@ def train(
             masks  = batch["mask"].to(device)    # (B, 1, H, W, D) integer labels
 
             optimizer.zero_grad()
-            logits = model(images)               # (B, C, H, W, D)
-            loss   = loss_fn(logits, masks)
-            loss.backward()
+
+            # AMP forward pass — computes in float16 to save VRAM
+            with torch.cuda.amp.autocast(enabled=use_amp):
+                logits = model(images)           # (B, C, H, W, D)
+                loss   = loss_fn(logits, masks)
+
+            # Scaled backward pass — GradScaler handles float16 → float32 safely
+            scaler.scale(loss).backward()
 
             # Gradient clipping prevents exploding gradients
+            scaler.unscale_(optimizer)
             torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
-            optimizer.step()
+            scaler.step(optimizer)
+            scaler.update()
 
             epoch_loss  += loss.item()
             num_batches += 1
