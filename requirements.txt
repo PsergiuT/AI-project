@@ -10,7 +10,7 @@ SimpleITK>=2.3.0         # Image I/O, resampling, geometry handling
 nibabel>=5.1.0           # NIfTI I/O
 
 # ── MONAI (medical AI framework) ───────────────────────────────────────────────
-monai[all]>=1.3.0,<1.4.0  # Pinned: 1.4+ changed SwinUNETR API (img_size arg)
+monai[all]>=1.4.0          # 1.4+ fixes uint32 overflow bug in Python 3.12; img_size API handled in code
 
 # ── Deep learning ─────────────────────────────────────────────────────────────
 torch>=2.1.0             # Install separately with CUDA support — see README
