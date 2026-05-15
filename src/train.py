@@ -102,7 +102,10 @@ def build_model(device: str, pretrained: bool = True) -> SwinUNETR:
                 return model
 
         # Load encoder weights only (decoder stays randomly initialised)
-        checkpoint = torch.load(str(weights_path), map_location=device)
+        # weights_only=False needed for PyTorch 2.6+ — MONAI checkpoint contains
+        # numpy scalars which are not allowed under the default strict mode.
+        # Safe to use here: checkpoint sourced from MONAI's official GitHub release.
+        checkpoint = torch.load(str(weights_path), map_location=device, weights_only=False)
 
         # The MONAI checkpoint wraps weights under a "state_dict" key
         state_dict = checkpoint.get("state_dict", checkpoint)
@@ -234,7 +237,7 @@ def train(
     no_improve_cnt = 0
 
     if resume_from and Path(resume_from).exists():
-        checkpoint = torch.load(resume_from, map_location=device)
+        checkpoint = torch.load(resume_from, map_location=device, weights_only=False)
         model.load_state_dict(checkpoint["model"])
         optimizer.load_state_dict(checkpoint["optimizer"])
         start_epoch = checkpoint.get("epoch", 0) + 1

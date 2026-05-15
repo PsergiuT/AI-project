@@ -72,7 +72,8 @@ def _get_model():
             "Run training first using notebooks/training.ipynb"
         )
 
-    checkpoint = torch.load(str(best_ckpt), map_location=device)
+    # weights_only=False needed for PyTorch 2.6+ — checkpoint may contain numpy scalars.
+    checkpoint = torch.load(str(best_ckpt), map_location=device, weights_only=False)
     model.load_state_dict(checkpoint["model"])
     model.eval()
     logger.info(f"SwinUNETR model loaded from {best_ckpt} on {device}")
