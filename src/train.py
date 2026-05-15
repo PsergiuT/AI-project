@@ -26,7 +26,14 @@ from torch.optim.lr_scheduler import CosineAnnealingLR
 from monai.networks.nets import SwinUNETR
 from monai.losses import DiceCELoss
 from monai.inferers import sliding_window_inference
+from monai.data.meta_tensor import MetaTensor
 from loguru import logger
+
+# PyTorch 2.6 changed torch.load to weights_only=True by default.
+# MONAI's PersistentDataset stores MetaTensor objects in its disk cache,
+# which are blocked under the new strict mode. Allowlisting here is safe —
+# MetaTensor is a trusted MONAI type, not arbitrary user code.
+torch.serialization.add_safe_globals([MetaTensor])
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 from config import (
