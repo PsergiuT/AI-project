@@ -177,15 +177,19 @@ def train(
     cache_rate   : float = 1.0,
     num_workers  : int = 4,
     resume_from  : str | None = None,
+    persistent   : bool = False,
 ) -> None:
     """
     Main training function.
 
     Args:
         pretrained:  Whether to load MONAI pre-trained encoder weights.
-        cache_rate:  Fraction of data to cache in RAM (lower on Colab if OOM).
-        num_workers: DataLoader worker processes (set 0 on Windows).
+        cache_rate:  Fraction of data to cache in RAM (ignored when persistent=True).
+        num_workers: DataLoader worker processes (set 0 on Windows / Colab).
         resume_from: Path to a checkpoint to resume training from.
+        persistent:  Use PersistentDataset (disk cache) instead of RAM cache.
+                     Recommended on Colab where RAM < 16GB. First run is slower
+                     while the cache is built; all subsequent epochs are fast.
     """
     set_seed(RANDOM_SEED)
     setup_logger(LOGS_DIR)
@@ -200,8 +204,17 @@ def train(
         )
 
     # ── Data ───────────────────────────────────────────────────────────────────
+    # PersistentDataset writes processed tensors to /tmp/aea_cache (Colab SSD).
+    # This avoids loading large CBCT volumes into RAM on every epoch.
+    cache_dir = Path("/tmp/aea_cache") if persistent else None
+    if persistent:
+        logger.info(f"Using PersistentDataset — disk cache at {cache_dir}")
+    else:
+        logger.info(f"Using CacheDataset — RAM cache rate: {cache_rate}")
+
     dm = AEADataModule(
         splits_dir  = SPLITS_DIR,
+        cache_dir   = cache_dir,
         cache_rate  = cache_rate,
         num_workers = num_workers,
     )
@@ -388,11 +401,15 @@ if __name__ == "__main__":
     parser.add_argument("--no_pretrained", action="store_true",
                         help="Train from random weights (not recommended)")
     parser.add_argument("--cache_rate", type=float, default=1.0,
-                        help="Fraction of data to cache in RAM (use 0.5 on Colab if OOM)")
+                        help="Fraction of data to cache in RAM (ignored with --persistent)")
     parser.add_argument("--num_workers", type=int, default=4,
-                        help="DataLoader worker processes (use 0 on Windows)")
+                        help="DataLoader worker processes (use 0 on Colab / Windows)")
     parser.add_argument("--resume", type=str, default=None,
                         help="Path to checkpoint to resume training from")
+    parser.add_argument("--persistent", action="store_true",
+                        help="Cache processed tensors to disk instead of RAM. "
+                             "Recommended on Colab (avoids RAM OOM). "
+                             "First run builds the cache (~5 min), then fast.")
     args = parser.parse_args()
 
     train(
@@ -400,4 +417,5 @@ if __name__ == "__main__":
         cache_rate  = args.cache_rate,
         num_workers = args.num_workers,
         resume_from = args.resume,
+        persistent  = args.persistent,
     )
