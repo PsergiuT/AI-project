@@ -1,0 +1,39 @@
+# ── Model checkpoints (large binaries — never commit) ─────────────────────────
+models/
+*.pth
+*.pt
+*.ckpt
+
+# ── Data (never commit raw or processed medical data) ─────────────────────────
+data/processed/
+data/splits/
+data/raw/
+
+# ── Logs ──────────────────────────────────────────────────────────────────────
+logs/
+*.log
+
+# ── Disk cache (PersistentDataset writes here) ────────────────────────────────
+/tmp/aea_cache/
+
+# ── Python ────────────────────────────────────────────────────────────────────
+__pycache__/
+*.pyc
+*.pyo
+.Python
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# ── Virtual environments ──────────────────────────────────────────────────────
+venv/
+.venv/
+env/
+
+# ── Jupyter ───────────────────────────────────────────────────────────────────
+.ipynb_checkpoints/
+
+# ── OS ────────────────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
