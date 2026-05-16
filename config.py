@@ -62,12 +62,12 @@ MODEL_CONFIG = {
 TRAIN_CONFIG = {
     # Patch sampling
     "patch_size"       : (96, 96, 96),
-    "num_samples"      : 2,           # Patches per volume per iteration (2 keeps T4 VRAM safe)
+    "num_samples"      : 4,           # Patches per volume per iteration (2 keeps T4 VRAM safe)
     "pos_sample_ratio" : 1,           # 1:1 foreground-to-background patch ratio
     "neg_sample_ratio" : 1,
 
     # DataLoader
-    "batch_size"       : 1,           # 1 volume × 2 patches = 2 patches/step on T4
+    "batch_size"       : 2,           # 1 volume × 2 patches = 2 patches/step on T4
     "num_workers"      : 4,           # Set to 0 on Windows if multiprocessing issues
 
     # Optimiser
@@ -97,7 +97,7 @@ TRAIN_CONFIG = {
 # ── Inference ──────────────────────────────────────────────────────────────────
 
 INFERENCE_CONFIG = {
-    "sw_batch_size"  : 2,           # Sliding window batch size (2 keeps T4 VRAM safe)
+    "sw_batch_size"  : 4,           # Sliding window batch size (2 keeps T4 VRAM safe)
     "overlap"        : 0.5,         # Overlap fraction between adjacent windows
     "mode"           : "gaussian",  # Blending mode for overlapping predictions
     "roi_size"       : (96, 96, 96),
