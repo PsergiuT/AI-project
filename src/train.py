@@ -44,7 +44,7 @@ torch.load = _torch_load_compat
 sys.path.insert(0, str(Path(__file__).parent.parent))
 from config import (
     MODEL_CONFIG, TRAIN_CONFIG, INFERENCE_CONFIG,
-    SPLITS_DIR, SWINUNETR_DIR, LOGS_DIR, RANDOM_SEED,
+    SPLITS_DIR, SWINUNETR_DIR, LOGS_DIR, RANDOM_SEED, NUM_CLASSES,
 )
 from src.dataset import AEADataModule
 from src.evaluate import SegmentationMetrics
@@ -298,6 +298,12 @@ def train(
         for batch in dm.train_loader:
             images = batch["image"].to(device)   # (B, 1, H, W, D)
             masks  = batch["mask"].to(device)    # (B, 1, H, W, D) integer labels
+
+            # Clamp labels to valid range [0, NUM_CLASSES-1].
+            # Some NRRD masks may contain unexpected label values (e.g. 255)
+            # which cause a CUDA index-out-of-bounds crash inside CE loss.
+            masks = masks.long()
+            masks = torch.clamp(masks, 0, NUM_CLASSES - 1)
 
             optimizer.zero_grad()
 
