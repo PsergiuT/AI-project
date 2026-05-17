@@ -259,7 +259,7 @@ def train(
         softmax       = True,    # Apply softmax to logits before loss
         lambda_dice   = TRAIN_CONFIG["dice_weight"],
         lambda_ce     = TRAIN_CONFIG["ce_weight"],
-        ce_weight     = ce_weights,
+        weight        = ce_weights,  # CE class weights (MONAI 1.4 uses 'weight')
     )
 
     # ── Optimiser & scheduler ──────────────────────────────────────────────────
