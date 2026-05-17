@@ -62,27 +62,27 @@ MODEL_CONFIG = {
 TRAIN_CONFIG = {
     # Patch sampling
     "patch_size"       : (96, 96, 96),
-    "num_samples"      : 4,           # Patches per volume per iteration
+    "num_samples"      : 2,           # Reduced 4→2: halves batches per epoch, same coverage over full run
     "pos_sample_ratio" : 1,           # 1:1 foreground-to-background patch ratio
     "neg_sample_ratio" : 1,
 
     # DataLoader
-    "batch_size"       : 2,           # L4 has 22.5GB VRAM — batch 2 is safe
-    "num_workers"      : 4,           # Set to 0 on Windows if multiprocessing issues
+    "batch_size"       : 1,           # L4: reduced from 2 to avoid OOM with weighted CE loss
+    "num_workers"      : 4,           # PersistentDataset cache is on disk — 4 workers is safe and fast
 
     # Optimiser
     "learning_rate"    : 1e-4,
     "weight_decay"     : 1e-5,
 
     # Scheduler
-    "max_epochs"       : 500,
+    "max_epochs"       : 800,         # More epochs to compensate for fewer patches per epoch
     "warmup_epochs"    : 10,          # Linear warmup before cosine annealing
 
     # Early stopping
     "patience"         : 50,         # Stop if val Dice doesn't improve for 50 epochs
 
     # Validation frequency
-    "val_every"        : 5,          # Run validation every N epochs
+    "val_every"        : 10,          # Increased 5→10: validation is expensive, run less often
 
     # Loss
     "dice_weight"      : 1.0,        # Weight for Dice component of DiceCELoss
@@ -102,7 +102,7 @@ TRAIN_CONFIG = {
 # ── Inference ──────────────────────────────────────────────────────────────────
 
 INFERENCE_CONFIG = {
-    "sw_batch_size"  : 4,           # Sliding window batch size (L4 has enough VRAM)
+    "sw_batch_size"  : 2,           # Reduced from 4 to avoid OOM during validation
     "overlap"        : 0.5,         # Overlap fraction between adjacent windows
     "mode"           : "gaussian",  # Blending mode for overlapping predictions
     "roi_size"       : (96, 96, 96),

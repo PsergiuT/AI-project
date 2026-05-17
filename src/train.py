@@ -247,6 +247,17 @@ def train(
     # point downloading the MONAI self-supervised weights again.
     model = build_model(device, pretrained=(pretrained and not finetune))
 
+    # ── Compile model for faster forward/backward passes ──────────────────────
+    # torch.compile (PyTorch 2.x) JIT-compiles the model into optimised kernels.
+    # First epoch is ~30s slower while it compiles; every epoch after is faster.
+    # Falls back silently if compile is unavailable (older PyTorch / CPU).
+    if device == "cuda" and hasattr(torch, "compile"):
+        try:
+            model = torch.compile(model)
+            logger.info("torch.compile enabled — GPU kernels optimised (~20-30% speedup)")
+        except Exception as e:
+            logger.warning(f"torch.compile skipped: {e}")
+
     # ── Loss function ──────────────────────────────────────────────────────────
     # Class weights for the cross-entropy component:
     #   background (0) → 0.1  — dominant class, downweight to prevent the network
