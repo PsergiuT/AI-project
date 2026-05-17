@@ -14,6 +14,7 @@ Run on Google Colab (recommended) or locally with a CUDA GPU:
 For Colab, use the provided notebook: notebooks/training.ipynb
 """
 
+import os
 import sys
 import time
 import argparse
