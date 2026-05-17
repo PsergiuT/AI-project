@@ -191,18 +191,26 @@ def train(
     num_workers  : int = 4,
     resume_from  : str | None = None,
     persistent   : bool = False,
+    finetune     : bool = False,
 ) -> None:
     """
     Main training function.
 
     Args:
         pretrained:  Whether to load MONAI pre-trained encoder weights.
+                     Ignored when finetune=True (weights come from resume_from).
         cache_rate:  Fraction of data to cache in RAM (ignored when persistent=True).
         num_workers: DataLoader worker processes (set 0 on Windows / Colab).
         resume_from: Path to a checkpoint to resume training from.
         persistent:  Use PersistentDataset (disk cache) instead of RAM cache.
                      Recommended on Colab where RAM < 16GB. First run is slower
                      while the cache is built; all subsequent epochs are fast.
+        finetune:    Fine-tune mode — loads only the model weights from resume_from
+                     (NOT the optimizer state), resets the optimizer with a lower
+                     learning rate (finetune_lr from TRAIN_CONFIG), and disables
+                     the warmup phase.  Use this to continue from a trained
+                     swinunetr_best.pth with improved loss / augmentations without
+                     disrupting the already-learned feature representations.
     """
     set_seed(RANDOM_SEED)
     setup_logger(LOGS_DIR)
@@ -234,30 +242,47 @@ def train(
     dm.setup()
 
     # ── Model ──────────────────────────────────────────────────────────────────
-    model = build_model(device, pretrained=pretrained)
+    # In fine-tune mode the model is loaded from resume_from, so there is no
+    # point downloading the MONAI self-supervised weights again.
+    model = build_model(device, pretrained=(pretrained and not finetune))
 
-    # ── Loss, optimiser, scheduler ─────────────────────────────────────────────
+    # ── Loss function ──────────────────────────────────────────────────────────
+    # Class weights for the cross-entropy component:
+    #   background (0) → 0.1  — dominant class, downweight to prevent the network
+    #                            from ignoring the rare AEA voxels
+    #   AEA Left   (1) → 1.0
+    #   AEA Right  (2) → 1.0
+    # The Dice component is naturally balanced because it operates per-class.
+    ce_weights = torch.tensor([0.1, 1.0, 1.0], dtype=torch.float32, device=device)
     loss_fn = DiceCELoss(
         to_onehot_y   = True,    # Convert integer labels to one-hot internally
         softmax       = True,    # Apply softmax to logits before loss
         lambda_dice   = TRAIN_CONFIG["dice_weight"],
         lambda_ce     = TRAIN_CONFIG["ce_weight"],
+        ce_weight     = ce_weights,
     )
+
+    # ── Optimiser & scheduler ──────────────────────────────────────────────────
+    # Fine-tune mode uses a much smaller LR so we don't undo already-learned
+    # representations with large gradient steps.
+    base_lr = TRAIN_CONFIG["finetune_lr"] if finetune else TRAIN_CONFIG["learning_rate"]
 
     optimizer = AdamW(
         model.parameters(),
-        lr           = TRAIN_CONFIG["learning_rate"],
+        lr           = base_lr,
         weight_decay = TRAIN_CONFIG["weight_decay"],
     )
 
+    # Fine-tune mode skips the linear warmup (model is already trained).
+    warmup_epochs = 0 if finetune else TRAIN_CONFIG["warmup_epochs"]
     scheduler = WarmupCosineScheduler(
         optimizer     = optimizer,
-        warmup_epochs = TRAIN_CONFIG["warmup_epochs"],
+        warmup_epochs = warmup_epochs,
         max_epochs    = TRAIN_CONFIG["max_epochs"],
-        base_lr       = TRAIN_CONFIG["learning_rate"],
+        base_lr       = base_lr,
     )
 
-    # ── Resume from checkpoint ─────────────────────────────────────────────────
+    # ── Load / resume checkpoint ───────────────────────────────────────────────
     start_epoch    = 0
     best_dice      = -1.0
     no_improve_cnt = 0
@@ -265,10 +290,28 @@ def train(
     if resume_from and Path(resume_from).exists():
         checkpoint = torch.load(resume_from, map_location=device, weights_only=False)
         model.load_state_dict(checkpoint["model"])
-        optimizer.load_state_dict(checkpoint["optimizer"])
-        start_epoch = checkpoint.get("epoch", 0) + 1
-        best_dice   = checkpoint.get("best_dice", -1.0)
-        logger.info(f"Resumed from {resume_from} (epoch {start_epoch})")
+
+        if finetune:
+            # Fine-tune: restore model weights only.
+            # A fresh optimizer at base_lr gives the network a clean slate to
+            # adapt to the improved loss / augmentations without momentum
+            # artefacts from the previous training run.
+            best_dice = checkpoint.get("best_dice", -1.0)
+            logger.info(
+                f"Fine-tune mode: loaded model weights from {resume_from} "
+                f"(prior best Dice: {best_dice:.4f})"
+            )
+            logger.info(
+                f"Optimizer reset — LR: {base_lr:.1e}, warmup: {warmup_epochs} epochs"
+            )
+            # Reset best_dice so the fine-tuned model must beat it to save a checkpoint
+            # (keeps the original best.pth safe until fine-tuning actually improves it)
+            best_dice = best_dice   # keep as floor — fine-tune must beat this
+        else:
+            optimizer.load_state_dict(checkpoint["optimizer"])
+            start_epoch = checkpoint.get("epoch", 0) + 1
+            best_dice   = checkpoint.get("best_dice", -1.0)
+            logger.info(f"Resumed from {resume_from} (epoch {start_epoch})")
 
     # ── AMP scaler — halves VRAM by computing in float16 ──────────────────────
     use_amp = (device == "cuda")
@@ -280,11 +323,13 @@ def train(
     history     = {"train_loss": [], "val_dice": [], "val_iou": [], "val_hd95": []}
 
     logger.info("=" * 60)
-    logger.info("Starting training")
+    logger.info("Starting training" + (" (FINE-TUNE mode)" if finetune else ""))
     logger.info(f"  Max epochs   : {TRAIN_CONFIG['max_epochs']}")
     logger.info(f"  Batch size   : {TRAIN_CONFIG['batch_size']}")
-    logger.info(f"  Learning rate: {TRAIN_CONFIG['learning_rate']}")
+    logger.info(f"  Learning rate: {base_lr:.1e}")
+    logger.info(f"  Warmup epochs: {warmup_epochs}")
     logger.info(f"  Patience     : {TRAIN_CONFIG['patience']} epochs")
+    logger.info(f"  CE class wts : [0.1, 1.0, 1.0] (bg downweighted)")
     logger.info("=" * 60)
 
     # ── Epoch loop ─────────────────────────────────────────────────────────────
@@ -381,6 +426,17 @@ def train(
                 logger.info(
                     f"✓ New best model saved (Dice: {best_dice:.4f}) → {best_path}"
                 )
+
+                # ── Auto-backup to Google Drive (if mounted) ───────────────────
+                # Colab sessions can die without warning. This copies the best
+                # checkpoint to Drive every time it improves so no training is
+                # ever lost, even if the session crashes before you can download.
+                drive_backup = Path("/content/drive/MyDrive/aea_checkpoints")
+                if drive_backup.exists():
+                    import shutil
+                    dst = drive_backup / TRAIN_CONFIG["best_model_name"]
+                    shutil.copy2(str(best_path), str(dst))
+                    logger.info(f"  ↑ Backed up to Google Drive → {dst}")
             else:
                 no_improve_cnt += TRAIN_CONFIG["val_every"]
                 logger.info(
@@ -405,6 +461,17 @@ def train(
                 "optimizer" : optimizer.state_dict(),
                 "best_dice" : best_dice,
             }, str(last_path))
+            logger.info(f"Checkpoint saved (epoch {epoch + 1}) → {last_path}")
+
+            # ── Auto-backup last checkpoint to Google Drive (if mounted) ───────
+            # This runs every 10 epochs so a crash can never cost more than
+            # 10 epochs of work. Resume by loading swinunetr_last.pth from Drive.
+            drive_backup = Path("/content/drive/MyDrive/aea_checkpoints")
+            if drive_backup.exists():
+                import shutil
+                dst = drive_backup / TRAIN_CONFIG["last_model_name"]
+                shutil.copy2(str(last_path), str(dst))
+                logger.info(f"  ↑ Last checkpoint backed up to Drive → {dst}")
 
     # ── Save training history ──────────────────────────────────────────────────
     save_json(history, LOGS_DIR / "training_history.json")
@@ -429,6 +496,11 @@ if __name__ == "__main__":
                         help="Cache processed tensors to disk instead of RAM. "
                              "Recommended on Colab (avoids RAM OOM). "
                              "First run builds the cache (~5 min), then fast.")
+    parser.add_argument("--finetune", action="store_true",
+                        help="Fine-tune mode: load model weights only from --resume, "
+                             "reset optimizer to finetune_lr (1e-5), no warmup. "
+                             "Use with --resume path/to/swinunetr_best.pth to continue "
+                             "from a trained checkpoint with improved loss & augmentations.")
     args = parser.parse_args()
 
     train(
@@ -437,4 +509,5 @@ if __name__ == "__main__":
         num_workers = args.num_workers,
         resume_from = args.resume,
         persistent  = args.persistent,
+        finetune    = args.finetune,
     )

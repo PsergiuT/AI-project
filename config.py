@@ -92,6 +92,11 @@ TRAIN_CONFIG = {
     "checkpoint_dir"   : str(SWINUNETR_DIR),
     "best_model_name"  : "swinunetr_best.pth",
     "last_model_name"  : "swinunetr_last.pth",
+
+    # Fine-tuning from a trained checkpoint
+    # Lower LR avoids disrupting already-learned features while still
+    # allowing the network to adapt to the improved loss and transforms.
+    "finetune_lr"      : 1e-5,
 }
 
 # ── Inference ──────────────────────────────────────────────────────────────────

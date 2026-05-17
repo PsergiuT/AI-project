@@ -8,6 +8,7 @@ This module defines:
 """
 
 import sys
+import torch
 from pathlib import Path
 from typing import Optional
 
@@ -23,6 +24,38 @@ from loguru import logger
 sys.path.insert(0, str(Path(__file__).parent.parent))
 from config import TRAIN_CONFIG, MODEL_CONFIG, HU_MIN, HU_MAX, NUM_CLASSES
 from src.utils import load_json
+
+
+# ── Custom transforms ──────────────────────────────────────────────────────────
+
+class ClampMaskLabeld(T.MapTransform):
+    """
+    Clamp mask label values to the valid range [0, num_classes - 1].
+
+    Some NRRD segmentation files contain unexpected label values (e.g. 255)
+    caused by software defaults or file-format quirks.  When such values
+    reach RandCropByPosNegLabeld, the sampler treats them as background
+    (because they are ≥ num_classes) and reports "Num foregrounds 0" on
+    every epoch, completely defeating foreground oversampling.
+
+    Applying this transform immediately before the crop sampler ensures that
+    any off-spec label is mapped to the nearest valid class:
+      - values < 0   → 0  (background)
+      - values > 2   → 2  (AEA Right, the highest valid class)
+
+    This is safe because the valid labels are {0, 1, 2} and any value outside
+    that range is a data artefact rather than a meaningful annotation.
+    """
+
+    def __init__(self, keys, num_classes: int):
+        super().__init__(keys)
+        self.num_classes = num_classes
+
+    def __call__(self, data):
+        d = dict(data)
+        for key in self.key_iterator(d):
+            d[key] = d[key].long().clamp(0, self.num_classes - 1)
+        return d
 
 
 # ── Transforms ────────────────────────────────────────────────────────────────
@@ -77,6 +110,12 @@ def get_transforms(mode: str = "train") -> T.Compose:
             b_max   = 1.0,
             clip    = True,
         ),
+
+        # Clamp mask labels to [0, NUM_CLASSES-1] BEFORE foreground sampling.
+        # Some NRRD files contain label values > 2 (e.g. 255), which causes
+        # RandCropByPosNegLabeld to report "Num foregrounds 0" and silently
+        # fall back to random patch sampling, hurting convergence.
+        ClampMaskLabeld(keys=["mask"], num_classes=NUM_CLASSES),
     ]
 
     if mode == "train":
@@ -106,6 +145,32 @@ def get_transforms(mode: str = "train") -> T.Compose:
             # Random intensity shift and scale to simulate scanner variability
             T.RandScaleIntensityd(keys=["image"], factors=0.1,  prob=0.5),
             T.RandShiftIntensityd(keys=["image"], offsets=0.1,  prob=0.5),
+
+            # ── Additional augmentations (improve generalisation) ──────────────
+
+            # Gaussian noise: simulates sensor/electronic noise across scanners
+            T.RandGaussianNoised(
+                keys  = ["image"],
+                prob  = 0.2,
+                mean  = 0.0,
+                std   = 0.01,
+            ),
+
+            # Gaussian blur: simulates slight defocus or reconstruction differences
+            T.RandGaussianSmoothd(
+                keys    = ["image"],
+                prob    = 0.2,
+                sigma_x = (0.5, 1.15),
+                sigma_y = (0.5, 1.15),
+                sigma_z = (0.5, 1.15),
+            ),
+
+            # Contrast adjustment: simulates different CBCT acquisition protocols
+            T.RandAdjustContrastd(
+                keys  = ["image"],
+                prob  = 0.2,
+                gamma = (0.7, 1.5),
+            ),
 
             # Convert to PyTorch tensors
             T.ToTensord(keys=["image", "mask"]),
