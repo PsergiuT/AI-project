@@ -62,13 +62,13 @@ MODEL_CONFIG = {
 TRAIN_CONFIG = {
     # Patch sampling
     "patch_size"       : (96, 96, 96),
-    "num_samples"      : 2,           # Reduced 4→2: halves batches per epoch, same coverage over full run
+    "num_samples"      : 2,           # 2 patches per volume — safe VRAM usage at batch_size=2
     "pos_sample_ratio" : 1,           # 1:1 foreground-to-background patch ratio
     "neg_sample_ratio" : 1,
 
     # DataLoader
-    "batch_size"       : 1,           # L4: reduced from 2 to avoid OOM with weighted CE loss
-    "num_workers"      : 4,           # PersistentDataset cache is on disk — 4 workers is safe and fast
+    "batch_size"       : 2,           # batch 2 + num_samples 2 targets ~16-17 GB VRAM
+    "num_workers"      : 6,           # PersistentDataset cache is on disk — 6 workers is safe and fast
 
     # Optimiser
     "learning_rate"    : 1e-4,
@@ -102,7 +102,7 @@ TRAIN_CONFIG = {
 # ── Inference ──────────────────────────────────────────────────────────────────
 
 INFERENCE_CONFIG = {
-    "sw_batch_size"  : 2,           # Reduced from 4 to avoid OOM during validation
+    "sw_batch_size"  : 4,           # Validation only (no gradients) — 4 is safe at this VRAM level
     "overlap"        : 0.5,         # Overlap fraction between adjacent windows
     "mode"           : "gaussian",  # Blending mode for overlapping predictions
     "roi_size"       : (96, 96, 96),
