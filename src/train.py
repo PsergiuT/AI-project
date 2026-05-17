@@ -427,16 +427,18 @@ def train(
                     f"✓ New best model saved (Dice: {best_dice:.4f}) → {best_path}"
                 )
 
-                # ── Auto-backup to Google Drive (if mounted) ───────────────────
-                # Colab sessions can die without warning. This copies the best
-                # checkpoint to Drive every time it improves so no training is
-                # ever lost, even if the session crashes before you can download.
-                drive_backup = Path("/content/drive/MyDrive/aea_checkpoints")
-                if drive_backup.exists():
-                    import shutil
-                    dst = drive_backup / TRAIN_CONFIG["best_model_name"]
-                    shutil.copy2(str(best_path), str(dst))
-                    logger.info(f"  ↑ Backed up to Google Drive → {dst}")
+                # ── Auto-backup best checkpoint to GCS (if configured) ─────────
+                # Set the env var AEA_GCS_BACKUP to a gs:// path before training.
+                # Example: os.environ['AEA_GCS_BACKUP'] = 'gs://my-bucket/aea'
+                # Colab Enterprise has gsutil pre-installed and authenticated.
+                _gcs = os.environ.get("AEA_GCS_BACKUP", "").strip()
+                if _gcs:
+                    _dst = f"{_gcs.rstrip('/')}/{TRAIN_CONFIG['best_model_name']}"
+                    _ret = os.system(f'gsutil -q cp "{best_path}" "{_dst}"')
+                    if _ret == 0:
+                        logger.info(f"  ↑ Best checkpoint backed up to GCS → {_dst}")
+                    else:
+                        logger.warning(f"  ✗ GCS backup failed (gsutil exit {_ret})")
             else:
                 no_improve_cnt += TRAIN_CONFIG["val_every"]
                 logger.info(
@@ -463,15 +465,17 @@ def train(
             }, str(last_path))
             logger.info(f"Checkpoint saved (epoch {epoch + 1}) → {last_path}")
 
-            # ── Auto-backup last checkpoint to Google Drive (if mounted) ───────
-            # This runs every 10 epochs so a crash can never cost more than
-            # 10 epochs of work. Resume by loading swinunetr_last.pth from Drive.
-            drive_backup = Path("/content/drive/MyDrive/aea_checkpoints")
-            if drive_backup.exists():
-                import shutil
-                dst = drive_backup / TRAIN_CONFIG["last_model_name"]
-                shutil.copy2(str(last_path), str(dst))
-                logger.info(f"  ↑ Last checkpoint backed up to Drive → {dst}")
+            # ── Auto-backup last checkpoint to GCS every 10 epochs ────────────
+            # A crash can never cost more than 10 epochs of work.
+            # Resume by downloading swinunetr_last.pth from GCS.
+            _gcs = os.environ.get("AEA_GCS_BACKUP", "").strip()
+            if _gcs:
+                _dst = f"{_gcs.rstrip('/')}/{TRAIN_CONFIG['last_model_name']}"
+                _ret = os.system(f'gsutil -q cp "{last_path}" "{_dst}"')
+                if _ret == 0:
+                    logger.info(f"  ↑ Last checkpoint backed up to GCS → {_dst}")
+                else:
+                    logger.warning(f"  ✗ GCS backup failed (gsutil exit {_ret})")
 
     # ── Save training history ──────────────────────────────────────────────────
     save_json(history, LOGS_DIR / "training_history.json")
