@@ -173,13 +173,13 @@ def get_transforms(mode: str = "train") -> T.Compose:
             ),
 
             # Elastic deformation: simulates anatomical variability between patients.
-            # Critical for small structures like AEA — teaches the model that the
-            # artery can curve and shift slightly between individuals.
+            # Magnitude kept small — large deformations on a tiny artery (~5 voxels
+            # wide) misalign image and label, giving contradictory training signal.
             T.Rand3DElasticd(
                 keys            = ["image", "mask"],
-                prob            = 0.2,
+                prob            = 0.15,
                 sigma_range     = (3, 5),
-                magnitude_range = (50, 150),
+                magnitude_range = (10, 30),
                 mode            = ("bilinear", "nearest"),
                 padding_mode    = "border",
             ),
