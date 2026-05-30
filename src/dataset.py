@@ -172,6 +172,18 @@ def get_transforms(mode: str = "train") -> T.Compose:
                 gamma = (0.7, 1.5),
             ),
 
+            # Elastic deformation: simulates anatomical variability between patients.
+            # Critical for small structures like AEA — teaches the model that the
+            # artery can curve and shift slightly between individuals.
+            T.Rand3DElasticd(
+                keys            = ["image", "mask"],
+                prob            = 0.2,
+                sigma_range     = (3, 5),
+                magnitude_range = (50, 150),
+                mode            = ("bilinear", "nearest"),
+                padding_mode    = "border",
+            ),
+
             # Convert to PyTorch tensors
             T.ToTensord(keys=["image", "mask"]),
         ]
@@ -302,11 +314,49 @@ class AEADataModule:
         self.val_loader   = None
         self.test_loader  = None
 
+    @staticmethod
+    def _filter_empty_masks(manifest: list) -> list:
+        """
+        Remove training cases where the mask contains no foreground voxels.
+
+        Cases with all-zero masks contribute nothing to foreground sampling —
+        RandCropByPosNegLabeld falls back to random background patches for them,
+        wasting compute and slowing convergence. Filtering them out ensures every
+        training case actually contains AEA voxels for the model to learn from.
+
+        This check reads the NIfTI mask header only (not the full volume) so it
+        runs in a few seconds even for large datasets.
+        """
+        import SimpleITK as sitk
+        import numpy as np
+
+        filtered, skipped = [], []
+        for case in manifest:
+            mask = sitk.GetArrayFromImage(sitk.ReadImage(case["mask"]))
+            if np.any(mask > 0):
+                filtered.append(case)
+            else:
+                skipped.append(case["case_id"])
+
+        if skipped:
+            logger.warning(
+                f"Removed {len(skipped)} training cases with empty masks "
+                f"(no AEA annotation): {skipped}"
+            )
+        logger.info(
+            f"Training cases after empty-mask filter: "
+            f"{len(filtered)}/{len(filtered) + len(skipped)}"
+        )
+        return filtered
+
     def setup(self) -> None:
         """Load JSON manifests and create DataLoaders for all splits."""
         train_manifest = load_json(self.splits_dir / "train.json")
         val_manifest   = load_json(self.splits_dir / "val.json")
         test_manifest  = load_json(self.splits_dir / "test.json")
+
+        # Remove training cases with no foreground — they hurt foreground sampling
+        train_manifest = self._filter_empty_masks(train_manifest)
 
         logger.info(
             f"Loaded splits: {len(train_manifest)} train / "

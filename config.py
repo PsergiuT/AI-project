@@ -63,7 +63,7 @@ TRAIN_CONFIG = {
     # Patch sampling
     "patch_size"       : (96, 96, 96),
     "num_samples"      : 2,           # 2 patches per volume — safe VRAM usage at batch_size=2
-    "pos_sample_ratio" : 1,           # 1:1 foreground-to-background patch ratio
+    "pos_sample_ratio" : 2,           # 2:1 foreground-to-background — AEA is tiny, force more artery patches
     "neg_sample_ratio" : 1,
 
     # DataLoader
