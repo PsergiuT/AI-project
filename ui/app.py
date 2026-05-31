@@ -352,11 +352,13 @@ def run_pipeline_ui(
         report_text = report_to_text(report) if report else result["output"]
 
         # ── Save report JSON for download ──────────────────────────────────────
+        # Save report to LOGS_DIR (not tmp_dir which gets deleted immediately)
         report_json_path = None
         if report:
-            report_json_path = str(tmp_dir / f"report_{patient_id}.json")
+            report_json_path = str(LOGS_DIR / f"report_{patient_id}.json")
             with open(report_json_path, "w") as f:
                 json.dump(report, f, indent=2)
+            logger.info(f"Report saved → {report_json_path}")
 
         shutil.rmtree(tmp_dir, ignore_errors=True)
 
@@ -482,10 +484,14 @@ def build_ui() -> gr.Blocks:
     """Build and return the Gradio Blocks dashboard."""
 
     custom_css = """
-    .panel-header { font-size: 15px; font-weight: 600; color: #e2e8f0; margin-bottom: 8px; }
-    .metric-box   { font-family: monospace; font-size: 13px; }
-    .status-bar   { font-size: 14px; font-weight: 500; }
-    footer        { display: none !important; }
+    .panel-header  { font-size: 15px; font-weight: 600; color: #e2e8f0; margin-bottom: 8px; }
+    .metric-box    { font-family: monospace; font-size: 13px; }
+    .status-bar    { font-size: 14px; font-weight: 500; }
+    .divider       { border: none; border-top: 2px solid #000; margin: 10px 0; }
+    .section-title { font-size: 15px; font-weight: 700; text-transform: uppercase;
+                     letter-spacing: 0.05em; border-bottom: 2px solid #000;
+                     padding-bottom: 4px; margin-bottom: 8px; }
+    footer         { display: none !important; }
     """
 
     with gr.Blocks(
@@ -495,26 +501,29 @@ def build_ui() -> gr.Blocks:
     ) as demo:
 
         # ── Header ─────────────────────────────────────────────────────────────
-        gr.Markdown("""
-        # 🏥 Anterior Ethmoidal Artery Segmentation
-        **AI-assisted preoperative localization of the AEA on CBCT scans**
-        Upload a CBCT scan, type a natural language instruction, and the AI agent
-        will automatically segment both the left and right anterior ethmoidal arteries.
-        """)
+        gr.Markdown("# Anterior Ethmoidal Artery Segmentation")
+        gr.Markdown(
+            "**AI-assisted preoperative localization of the AEA on CBCT scans.** "
+            "Upload a CBCT scan, type a natural language instruction, and the AI agent "
+            "will automatically segment both the left and right anterior ethmoidal arteries."
+        )
+        gr.HTML("<hr style='border:none;border-top:2px solid #000;margin:6px 0;'>")
 
+        # ── Status bar ─────────────────────────────────────────────────────────
         status_bar = gr.Textbox(
             value       = "Ready. Upload a CBCT scan to begin.",
             label       = "Status",
             interactive = False,
             elem_classes= ["status-bar"],
         )
+        gr.HTML("<hr style='border:none;border-top:2px solid #000;margin:6px 0;'>")
 
         # ── Main 3-column layout ───────────────────────────────────────────────
         with gr.Row(equal_height=False):
 
             # ── LEFT: Input panel ──────────────────────────────────────────────
             with gr.Column(scale=1, min_width=280):
-                gr.Markdown("### 📂 Input")
+                gr.HTML("<div class='section-title'>Input</div>")
 
                 dicom_upload = gr.File(
                     label       = "CBCT Scan (ZIP containing DICOM folder)",
@@ -535,7 +544,7 @@ def build_ui() -> gr.Blocks:
                     lines       = 3,
                 )
 
-                with gr.Accordion("⚙️ Ground truth evaluation (optional)", open=False):
+                with gr.Accordion("Ground truth evaluation (optional)", open=False):
                     use_gt_checkbox = gr.Checkbox(
                         label = "Use ground truth NRRD for metric evaluation",
                         value = False,
@@ -551,21 +560,24 @@ def build_ui() -> gr.Blocks:
                     )
 
                 run_btn = gr.Button(
-                    "▶ Run Segmentation",
+                    "Run Segmentation",
                     variant = "primary",
                     size    = "lg",
                 )
 
+                gr.HTML("<hr style='border:none;border-top:1px solid #000;margin:10px 0;'>")
                 gr.Markdown(
-                    "---\n"
                     "**Model:** SwinUNETR (fine-tuned)  \n"
                     "**Agent:** Llama 3.1 8B via Ollama  \n"
                     "**Dataset:** 130 CBCT cases"
                 )
 
+            # ── Vertical divider ───────────────────────────────────────────────
+            gr.HTML("<div style='border-left:2px solid #000;min-height:600px;margin:0 8px;'></div>")
+
             # ── CENTRE: Slice viewer ───────────────────────────────────────────
             with gr.Column(scale=2, min_width=500):
-                gr.Markdown("### 🔬 Slice Viewer")
+                gr.HTML("<div class='section-title'>Slice Viewer</div>")
                 gr.Markdown(
                     "_Green = AEA Left · Orange = AEA Right · "
                     "Use sliders to navigate slices_"
@@ -613,9 +625,12 @@ def build_ui() -> gr.Blocks:
                             label   = "Sagittal slice (X)",
                         )
 
+            # ── Vertical divider ───────────────────────────────────────────────
+            gr.HTML("<div style='border-left:2px solid #000;min-height:600px;margin:0 8px;'></div>")
+
             # ── RIGHT: Results panel ───────────────────────────────────────────
             with gr.Column(scale=1, min_width=300):
-                gr.Markdown("### 📊 Results")
+                gr.HTML("<div class='section-title'>Results</div>")
 
                 metrics_box = gr.Textbox(
                     label       = "Segmentation Metrics",
@@ -634,12 +649,13 @@ def build_ui() -> gr.Blocks:
                 )
 
                 report_download = gr.File(
-                    label       = "📥 Download Report (JSON)",
+                    label       = "Download Report (JSON)",
                     interactive = False,
                 )
 
-        # ── Bottom: Agent reasoning log ────────────────────────────────────────
-        with gr.Accordion("🤖 Agent Reasoning Log", open=False):
+        # ── Bottom divider + Agent reasoning log ───────────────────────────────
+        gr.HTML("<hr style='border:none;border-top:2px solid #000;margin:10px 0;'>")
+        with gr.Accordion("Agent Reasoning Log", open=False):
             gr.Markdown(
                 "This log shows the step-by-step reasoning of the AI agent: "
                 "which tools it called, in what order, and what each tool returned."
@@ -651,14 +667,6 @@ def build_ui() -> gr.Blocks:
                 interactive = False,
                 elem_classes= ["metric-box"],
             )
-
-        # ── Disclaimer ─────────────────────────────────────────────────────────
-        gr.Markdown("""
-        ---
-        ⚠️ **Clinical Disclaimer:** This tool is for research and educational purposes only.
-        All AI-generated segmentations must be reviewed and validated by a qualified
-        otolaryngologist or radiologist before use in surgical planning.
-        """)
 
         # ── Event handlers ─────────────────────────────────────────────────────
 
