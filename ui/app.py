@@ -280,16 +280,30 @@ def run_pipeline_ui(
         # ── Retrieve results from session store ────────────────────────────────
         session_id = result["session_id"]
 
+        # Detailed diagnostics
+        logger.info(f"Agent result success: {result['success']}")
+        logger.info(f"Agent output: {result['output'][:300]}")
+        logger.info(f"session_id from agent: {session_id}")
+        logger.info(f"All session IDs in store: {list(SESSION_STORE.keys())}")
+        logger.info(f"Agent steps ({len(result.get('steps', []))}):")
+        for s in result.get("steps", []):
+            logger.info(f"  tool={s['tool']} | input={s['tool_input'][:80]} | obs={s['observation'][:120]}")
+
         # Fallback: if regex didn't capture session_id, use the last entry in SESSION_STORE
         if session_id is None and SESSION_STORE:
             session_id = list(SESSION_STORE.keys())[-1]
             logger.warning(f"session_id not captured from agent output — using last session: {session_id}")
 
         session    = SESSION_STORE.get(session_id, {})
+        logger.info(f"Session keys for '{session_id}': {list(session.keys())}")
+
         mask       = session.get("clean_mask", session.get("raw_mask"))
         sitk_img   = session.get("sitk_image")
         report     = session.get("report", {})
         steps      = result.get("steps", [])
+
+        logger.info(f"mask is None: {mask is None}")
+        logger.info(f"sitk_img is None: {sitk_img is None}")
 
         if mask is None:
             shutil.rmtree(tmp_dir, ignore_errors=True)
