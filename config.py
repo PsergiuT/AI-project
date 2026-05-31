@@ -10,7 +10,7 @@ from pathlib import Path
 # ── Paths ──────────────────────────────────────────────────────────────────────
 
 # Root of the raw dataset (the folder containing CROP1 … CROP7)
-DATA_ROOT = Path("../dateArteraEtimoidala")
+DATA_ROOT = Path("../dateArteraEtmoidala")
 
 PROJECT_ROOT   = Path(__file__).parent.resolve()
 DATA_DIR       = PROJECT_ROOT / "data"
@@ -53,7 +53,7 @@ MODEL_CONFIG = {
     "img_size"    : (96, 96, 96),   # 3D patch size fed to SwinUNETR
     "in_channels" : 1,              # Single-channel CBCT (grayscale)
     "out_channels": NUM_CLASSES,    # 3-class output
-    "feature_size": 48,             # Embedding dimension (base config)
+    "feature_size": 64,             # Embedding dimension (base config)
     "use_checkpoint": True,         # Gradient checkpointing — saves VRAM on Colab
 }
 
@@ -63,29 +63,29 @@ TRAIN_CONFIG = {
     # Patch sampling
     "patch_size"       : (96, 96, 96),
     "num_samples"      : 4,           # Patches per volume per iteration
-    "pos_sample_ratio" : 1,           # 1:1 foreground-to-background patch ratio
+    "pos_sample_ratio" : 2,           # 1:1 foreground-to-background patch ratio
     "neg_sample_ratio" : 1,
 
     # DataLoader
-    "batch_size"       : 2,           # L4 has 22.5GB VRAM — batch 2 is safe
-    "num_workers"      : 4,           # Set to 0 on Windows if multiprocessing issues
+    "batch_size"       : 3,           # L4 has 22.5GB VRAM — batch 2 is safe
+    "num_workers"      : 6,           # Set to 0 on Windows if multiprocessing issues
 
     # Optimiser
-    "learning_rate"    : 1e-4,
-    "weight_decay"     : 1e-5,
+    "learning_rate"    : 3e-4,
+    "weight_decay"     : 5e-5,
 
     # Scheduler
-    "max_epochs"       : 500,
+    "max_epochs"       : 800,
     "warmup_epochs"    : 10,          # Linear warmup before cosine annealing
 
     # Early stopping
-    "patience"         : 50,         # Stop if val Dice doesn't improve for 50 epochs
+    "patience"         : 80,         # Stop if val Dice doesn't improve for 50 epochs
 
     # Validation frequency
-    "val_every"        : 5,          # Run validation every N epochs
+    "val_every"        : 15,          # Run validation every N epochs
 
     # Loss
-    "dice_weight"      : 1.0,        # Weight for Dice component of DiceCELoss
+    "dice_weight"      : 1.5,        # Weight for Dice component of DiceCELoss
     "ce_weight"        : 1.0,        # Weight for Cross-Entropy component
 
     # Checkpointing
@@ -96,14 +96,14 @@ TRAIN_CONFIG = {
     # Fine-tuning from a trained checkpoint
     # Lower LR avoids disrupting already-learned features while still
     # allowing the network to adapt to the improved loss and transforms.
-    "finetune_lr"      : 1e-5,
+    "finetune_lr"      : 5e-5,
 }
 
 # ── Inference ──────────────────────────────────────────────────────────────────
 
 INFERENCE_CONFIG = {
-    "sw_batch_size"  : 4,           # Sliding window batch size (L4 has enough VRAM)
-    "overlap"        : 0.5,         # Overlap fraction between adjacent windows
+    "sw_batch_size"  : 6,           # Sliding window batch size (L4 has enough VRAM)
+    "overlap"        : 0.75,         # Overlap fraction between adjacent windows
     "mode"           : "gaussian",  # Blending mode for overlapping predictions
     "roi_size"       : (96, 96, 96),
 }
