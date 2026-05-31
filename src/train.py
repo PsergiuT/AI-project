@@ -14,6 +14,7 @@ Run on Google Colab (recommended) or locally with a CUDA GPU:
 For Colab, use the provided notebook: notebooks/training.ipynb
 """
 
+import gc
 import os
 import sys
 import time
@@ -346,6 +347,7 @@ def train(
         for batch in dm.train_loader:
             images = batch["image"].to(device)   # (B, 1, H, W, D)
             masks  = batch["mask"].to(device)    # (B, 1, H, W, D) integer labels
+            del batch   # release MetaTensor metadata dict immediately
 
             # Clamp labels to valid range [0, NUM_CLASSES-1].
             # Some NRRD masks may contain unexpected label values (e.g. 255)
@@ -385,12 +387,13 @@ def train(
         # ── Validation step ────────────────────────────────────────────────────
         if (epoch + 1) % TRAIN_CONFIG["val_every"] == 0:
             model.eval()
-            val_metrics.reset()
 
+            val_metrics.reset()
             with torch.no_grad():
                 for batch in dm.val_loader:
                     images = batch["image"].to(device)
                     masks  = batch["mask"].to(device)
+                    del batch
 
                     pred_logits = sliding_window_inference(
                         inputs        = images,
@@ -406,6 +409,7 @@ def train(
                     val_metrics.update(pred_oh, gt_oh)
 
             results = val_metrics.aggregate()
+            val_metrics.reset()   # free metric buffers immediately after aggregation
             val_metrics.log_results(results, prefix=f"Val Epoch {epoch + 1}")
 
             history["val_dice"].append(results["dice_mean"])
@@ -456,6 +460,9 @@ def train(
                     f"(no improvement for {no_improve_cnt} epochs)."
                 )
                 break
+
+        # Force Python GC to collect unreferenced tensors/dicts from this epoch
+        gc.collect()
 
         # ── Save last checkpoint every 10 epochs ──────────────────────────────
         if (epoch + 1) % 10 == 0:
