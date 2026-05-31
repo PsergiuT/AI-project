@@ -106,6 +106,31 @@ def _new_session(dicom_path: str) -> str:
     return session_id
 
 
+def _parse_session_id(raw: str) -> str:
+    """
+    Extract just the session ID from whatever the LLM passes.
+
+    The LLM sometimes passes extra text around the ID, e.g.:
+        "session_id = 'abc12345'"
+        "Session ID: abc12345"
+        "'abc12345'"
+        "abc12345"
+
+    This function strips all of that and returns just the 8-char hex string.
+    Falls back to the cleaned string if no hex match is found.
+    """
+    import re
+    cleaned = raw.strip().strip('"\'').strip()
+    # Try to extract an 8-char hex string (uuid4[:8] format)
+    match = re.search(r'\b([a-f0-9]{8})\b', cleaned)
+    if match:
+        return match.group(1)
+    # Fallback: strip common prefixes and quotes
+    cleaned = re.sub(r'(?i)session[_\s]*id\s*[=:]\s*', '', cleaned)
+    cleaned = cleaned.strip().strip('"\'').strip()
+    return cleaned
+
+
 # ── Tool 1 — Load and preprocess ──────────────────────────────────────────────
 
 @tool
@@ -200,7 +225,7 @@ def run_segmentation(session_id: str) -> str:
         Confirmation string with the session_id and prediction statistics.
         Returns an error message string if inference fails.
     """
-    session_id = session_id.strip()
+    session_id = _parse_session_id(session_id)
     logger.info(f"[Tool 2] Running segmentation for session: {session_id}")
 
     if session_id not in SESSION_STORE:
@@ -269,7 +294,7 @@ def postprocess_segmentation(session_id: str) -> str:
     Returns:
         Confirmation string with cleaned voxel counts.
     """
-    session_id = session_id.strip()
+    session_id = _parse_session_id(session_id)
     logger.info(f"[Tool 3] Post-processing for session: {session_id}")
 
     if session_id not in SESSION_STORE:
@@ -332,7 +357,7 @@ def evaluate_segmentation(session_id: str, gt_nrrd_path: str) -> str:
     Returns:
         Formatted string with metric values for both AEA sides.
     """
-    session_id   = session_id.strip()
+    session_id   = _parse_session_id(session_id)
     gt_nrrd_path = gt_nrrd_path.strip().strip('"\'')
     logger.info(f"[Tool 4] Evaluating session '{session_id}' against {gt_nrrd_path}")
 
@@ -438,7 +463,7 @@ def generate_final_report(session_id: str, patient_id: str = "unknown") -> str:
     Returns:
         Formatted text report string ready for display.
     """
-    session_id = session_id.strip()
+    session_id = _parse_session_id(session_id)
     patient_id = patient_id.strip() if patient_id else "unknown"
     logger.info(f"[Tool 5] Generating report for session '{session_id}', patient '{patient_id}'")
 
