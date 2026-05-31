@@ -1,26 +1,3 @@
-"""
-ui/app.py — Gradio dashboard for the AEA Segmentation Agent.
-
-Layout (3-column dashboard):
-┌────────────────┬─────────────────────────┬──────────────────────┐
-│  INPUT PANEL   │    SLICE VIEWER         │   RESULTS PANEL      │
-│                │                         │                      │
-│  DICOM upload  │  Axial / Coronal /      │  Metrics table       │
-│  NRRD upload   │  Sagittal tabs          │  Report text         │
-│  Patient ID    │  Slice slider           │  Download report     │
-│  Instruction   │  Overlay toggle         │                      │
-│  [Run] button  │                         │                      │
-├────────────────┴─────────────────────────┴──────────────────────┤
-│                  AGENT REASONING LOG                             │
-│  (shows Thought → Action → Observation trace)                    │
-└──────────────────────────────────────────────────────────────────┘
-
-Run with:
-    python ui/app.py
-    or
-    python run.py
-"""
-
 import sys
 import os
 import json
@@ -45,12 +22,11 @@ from src.agent.tools import SESSION_STORE
 
 
 # ── Colour palette (matches 3D Slicer annotation colours) ─────────────────────
-AEAL_COLOUR = (0.13, 0.55, 0.13, 0.65)   # Green with transparency — AEA Left
+AEAL_COLOUR = (0.10, 0.20, 0.60, 0.65)   # Blue with transparency — AEA Left
 AEAR_COLOUR = (0.94, 0.50, 0.13, 0.65)   # Orange with transparency — AEA Right
 BG_COLOUR   = "#1a1a2e"                   # Dark background for the UI theme
 
 
-# ── Slice renderer ─────────────────────────────────────────────────────────────
 
 def render_slice(
     volume      : np.ndarray,
@@ -94,7 +70,7 @@ def render_slice(
     ax.imshow(img_2d, cmap="gray", vmin=0.05, vmax=0.95, aspect="equal")
 
     if show_overlay and mask_2d.max() > 0:
-        # AEA Left (label 1) — green
+        # AEA Left (label 1) — blue
         aeal_mask = np.ma.masked_where(mask_2d != 1, np.ones_like(mask_2d))
         ax.imshow(aeal_mask, cmap=None, alpha=0.0)  # placeholder for legend
         aeal_rgba = np.zeros((*mask_2d.shape, 4))
@@ -158,10 +134,11 @@ def render_placeholder(message: str = "Upload a CBCT scan\nand click Run Segment
 
 def render_waiting() -> Image.Image:
     """Return a placeholder image shown while the agent is running."""
-    return render_placeholder("⏳ Please wait for the agent\nto finish running the\nsegmentation pipeline...")
+    return render_placeholder("Please wait for the agent\nto finish running the\nsegmentation pipeline...")
 
 
-# ── File handling ──────────────────────────────────────────────────────────────
+
+
 
 def extract_upload(uploaded_file_path: str, tmp_dir: Path) -> tuple[str | None, str | None]:
     """
@@ -198,8 +175,6 @@ def extract_upload(uploaded_file_path: str, tmp_dir: Path) -> tuple[str | None, 
     return dicom_dir, nrrd_path
 
 
-# ── Agent runner ───────────────────────────────────────────────────────────────
-
 # Global state — holds the last pipeline result for the slice viewer
 _pipeline_state: dict = {
     "volume"     : None,
@@ -227,7 +202,7 @@ def run_pipeline_ui(
     """
     global _pipeline_state
 
-    # ── Validate inputs ────────────────────────────────────────────────────────
+    # Validate inputs
     if not dicom_zip_path:
         return _error_return("Please upload a DICOM zip file or provide a path.")
 
@@ -237,12 +212,12 @@ def run_pipeline_ui(
     if not instruction.strip():
         instruction = "Segment the anterior ethmoidal artery and generate a clinical report."
 
-    # ── Setup temp directory ───────────────────────────────────────────────────
+    # Setup temp directory
     tmp_dir = Path(tempfile.mkdtemp(prefix="aea_ui_"))
 
     try:
-        # ── Extract uploaded file ──────────────────────────────────────────────
-        status = "⏳ Extracting uploaded files..."
+        # Extract uploaded file
+        status = "Extracting uploaded files..."
         yield _progress_return(status)
 
         dicom_dir, auto_nrrd = extract_upload(dicom_zip_path, tmp_dir)
@@ -259,7 +234,7 @@ def run_pipeline_ui(
         logger.info(f"DICOM dir: {dicom_dir}")
         logger.info(f"GT NRRD:   {gt_path}")
 
-        # ── Run the agent ──────────────────────────────────────────────────────
+        # Run the agent
         status = "🤖 Agent is running the segmentation pipeline..."
         yield _progress_return(status)
 
@@ -277,7 +252,7 @@ def run_pipeline_ui(
             yield _error_return(f"Pipeline error: {result['output']}")
             return
 
-        # ── Retrieve results from session store ────────────────────────────────
+        # Retrieve results from session store
         session_id = result["session_id"]
 
         # Detailed diagnostics
@@ -310,7 +285,7 @@ def run_pipeline_ui(
             yield _error_return("Segmentation did not produce a mask. Check logs.")
             return
 
-        # ── Reconstruct normalised volume for display ──────────────────────────
+        # Reconstruct normalised volume for display
         import SimpleITK as _sitk
         volume_np = _sitk.GetArrayFromImage(sitk_img).astype(np.float32)
         volume_np = np.clip(volume_np, HU_MIN, HU_MAX)
@@ -325,7 +300,7 @@ def run_pipeline_ui(
             "steps"     : steps,
         })
 
-        # ── Render initial slices ──────────────────────────────────────────────
+        # Render initial slices
         # Find the best slice (middle of AEA extent) for each plane
         aea_voxels = np.argwhere(mask > 0)
         if len(aea_voxels) > 0:
@@ -341,17 +316,17 @@ def run_pipeline_ui(
         coronal_img  = render_slice(volume_np, mask, cor_mid, "coronal")
         sagittal_img = render_slice(volume_np, mask, sag_mid, "sagittal")
 
-        # ── Build metrics text ─────────────────────────────────────────────────
+        # Build metrics text
         metrics_text = _format_metrics(session.get("metrics"))
 
-        # ── Build agent log ────────────────────────────────────────────────────
+        # Build agent log
         agent_log = _format_agent_log(steps)
 
-        # ── Report text ────────────────────────────────────────────────────────
+        # Report text
         from src.report import report_to_text
         report_text = report_to_text(report) if report else result["output"]
 
-        # ── Save report JSON for download ──────────────────────────────────────
+        # Save report JSON for download
         # Save report to LOGS_DIR (not tmp_dir which gets deleted immediately)
         report_json_path = None
         if report:
@@ -405,8 +380,7 @@ def _progress_return(msg: str) -> tuple:
     )
 
 
-# ── Slider callbacks ───────────────────────────────────────────────────────────
-
+# Slider callbacks
 def update_axial(slice_idx: int) -> Image.Image:
     v, m = _pipeline_state["volume"], _pipeline_state["mask"]
     if v is None:
@@ -428,8 +402,7 @@ def update_sagittal(slice_idx: int) -> Image.Image:
     return render_slice(v, m, int(slice_idx), "sagittal")
 
 
-# ── Formatting helpers ─────────────────────────────────────────────────────────
-
+#Formatting helpers
 def _format_metrics(metrics: Optional[dict]) -> str:
     """Format metrics dict into a readable string for the UI panel."""
     if not metrics:
@@ -478,8 +451,7 @@ def _format_agent_log(steps: list) -> str:
     return "\n".join(lines)
 
 
-# ── Gradio UI definition ───────────────────────────────────────────────────────
-
+# Gradio UI definition
 def build_ui() -> gr.Blocks:
     """Build and return the Gradio Blocks dashboard."""
 
@@ -523,7 +495,7 @@ def build_ui() -> gr.Blocks:
         css     = custom_css,
     ) as demo:
 
-        # ── Header + status box ────────────────────────────────────────────────
+        # Header + status box
         with gr.Group(elem_id="header-box"):
             gr.Markdown("# Anterior Ethmoidal Artery Segmentation")
             gr.Markdown(
@@ -538,10 +510,10 @@ def build_ui() -> gr.Blocks:
                 elem_classes= ["status-bar"],
             )
 
-        # ── Main 3-column layout ───────────────────────────────────────────────
+        # Main 3-column layout
         with gr.Row(equal_height=False, elem_id="main-row"):
 
-            # ── LEFT: Input panel ──────────────────────────────────────────────
+            # LEFT: Input panel
             with gr.Column(scale=1, min_width=280, elem_id="input-col"):
                 gr.HTML("<div class='section-title'>Input</div>")
 
@@ -593,7 +565,7 @@ def build_ui() -> gr.Blocks:
                     "**Dataset:** 130 CBCT cases"
                 )
 
-            # ── CENTRE: Slice viewer ───────────────────────────────────────────
+            # CENTRE: Slice viewer
             with gr.Column(scale=3, min_width=500, elem_id="viewer-col"):
                 gr.HTML("<div class='section-title'>Slice Viewer</div>")
                 gr.Markdown(
@@ -643,7 +615,7 @@ def build_ui() -> gr.Blocks:
                             label   = "Sagittal slice (X)",
                         )
 
-            # ── RIGHT: Results panel ───────────────────────────────────────────
+            # RIGHT: Results panel
             with gr.Column(scale=2, min_width=300, elem_id="results-col"):
                 gr.HTML("<div class='section-title'>Results</div>")
 
@@ -668,7 +640,7 @@ def build_ui() -> gr.Blocks:
                     interactive = False,
                 )
 
-        # ── Agent reasoning log ────────────────────────────────────────────────
+        # Agent reasoning log
         with gr.Group(elem_id="log-box"):
             with gr.Accordion("Agent Reasoning Log", open=False):
                 gr.Markdown(
@@ -683,7 +655,7 @@ def build_ui() -> gr.Blocks:
                     elem_classes= ["metric-box"],
                 )
 
-        # ── Event handlers ─────────────────────────────────────────────────────
+        # Event handlers
 
         # Show waiting image immediately when Run is clicked (before queue picks it up)
         run_btn.click(
@@ -730,8 +702,7 @@ def build_ui() -> gr.Blocks:
     return demo
 
 
-# ── Entry point ────────────────────────────────────────────────────────────────
-
+# Entry point
 def launch(share: bool = False, port: int = 7860) -> None:
     """Launch the Gradio dashboard."""
     demo = build_ui()
