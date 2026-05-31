@@ -53,7 +53,7 @@ MODEL_CONFIG = {
     "img_size"    : (96, 96, 96),   # 3D patch size fed to SwinUNETR
     "in_channels" : 1,              # Single-channel CBCT (grayscale)
     "out_channels": NUM_CLASSES,    # 3-class output
-    "feature_size": 64,             # Embedding dimension (base config)
+    "feature_size": 60,             # Embedding dimension (base config)
     "use_checkpoint": True,         # Gradient checkpointing — saves VRAM on Colab
 }
 
