@@ -169,8 +169,3 @@ python run.py --share
 3. Itayem et al. (2019). *Increased accuracy, confidence, and efficiency in AEA identification with segmented image guidance.* Otolaryngology–Head and Neck Surgery.
 4. Tang et al. (2022). *Self-supervised pre-training of Swin Transformers for 3D medical image analysis.* CVPR.
 
----
-
-## License
-
-For academic and research use only. Not approved for clinical deployment.

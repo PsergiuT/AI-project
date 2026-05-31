@@ -1,7 +1,3 @@
-"""
-utils.py — Shared utility functions used across the pipeline.
-"""
-
 import json
 import random
 import numpy as np
@@ -25,8 +21,6 @@ def set_seed(seed: int = 42) -> None:
     logger.info(f"Random seed set to {seed}")
 
 
-# ── JSON helpers ───────────────────────────────────────────────────────────────
-
 def save_json(data: dict | list, path: Path) -> None:
     """Save a Python dict or list as a JSON file."""
     path = Path(path)
@@ -42,7 +36,6 @@ def load_json(path: Path) -> dict | list:
         return json.load(f)
 
 
-# ── Dataset manifest ───────────────────────────────────────────────────────────
 
 def build_manifest(processed_dir: Path) -> list[dict]:
     """
@@ -79,8 +72,6 @@ def build_manifest(processed_dir: Path) -> list[dict]:
     logger.info(f"Manifest built: {len(manifest)} cases found in {processed_dir}")
     return manifest
 
-
-# ── Train/val/test split ───────────────────────────────────────────────────────
 
 def split_manifest(
     manifest    : list[dict],
@@ -121,8 +112,6 @@ def split_manifest(
     )
     return train, val, test
 
-
-# ── Logging helpers ────────────────────────────────────────────────────────────
 
 def setup_logger(log_dir: Path, log_level: str = "INFO") -> None:
     """Configure loguru to write to both console and a log file."""

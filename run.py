@@ -1,25 +1,7 @@
-"""
-run.py — Entry point for the AEA Segmentation web application.
-
-Usage:
-    python run.py                  # Start UI on localhost:7860
-    python run.py --port 8080      # Custom port
-    python run.py --share          # Create a public Gradio link (useful for demos)
-
-Before running:
-    1. Install dependencies:       pip install -r requirements.txt
-    2. Install Ollama:             https://ollama.com
-    3. Pull the LLM model:         ollama pull llama3.1
-    4. Start Ollama server:        ollama serve   (in a separate terminal)
-    5. Place trained model at:     models/swinunetr/swinunetr_best.pth
-    6. Run this script:            python run.py
-"""
-
 import sys
 import argparse
 from pathlib import Path
 
-# Ensure the project root is on the path
 sys.path.insert(0, str(Path(__file__).parent))
 
 from loguru import logger
