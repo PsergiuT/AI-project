@@ -27,7 +27,7 @@ from monai.utils import set_determinism
 from loguru import logger
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from config import NUM_CLASSES, CLASS_NAMES, EVAL_CONFIG
+from config import NUM_CLASSES, CLASS_NAMES, EVAL_CONFIG, INFERENCE_CONFIG
 
 
 # ── Metric containers ──────────────────────────────────────────────────────────
@@ -210,8 +210,8 @@ def evaluate_model(
     model      : torch.nn.Module,
     dataloader : torch.utils.data.DataLoader,
     device     : str,
-    roi_size   : tuple = (96, 96, 96),
-    sw_batch   : int = 4,
+    roi_size   : tuple = INFERENCE_CONFIG["roi_size"],
+    sw_batch   : int   = INFERENCE_CONFIG["sw_batch_size"],
 ) -> dict:
     """
     Run full evaluation on a dataloader (val or test split).
@@ -245,8 +245,8 @@ def evaluate_model(
                 roi_size    = roi_size,
                 sw_batch_size = sw_batch,
                 predictor   = model,
-                overlap     = 0.5,
-                mode        = "gaussian",
+                overlap     = INFERENCE_CONFIG["overlap"],
+                mode        = INFERENCE_CONFIG["mode"],
             )
 
             pred_onehot = metrics.logits_to_onehot(pred_logits)

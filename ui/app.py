@@ -40,7 +40,7 @@ import gradio as gr
 from loguru import logger
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from config import LOGS_DIR, CLASS_NAMES
+from config import LOGS_DIR, CLASS_NAMES, HU_MIN, HU_MAX
 from src.agent.tools import SESSION_STORE
 
 
@@ -299,8 +299,8 @@ def run_pipeline_ui(
         # ── Reconstruct normalised volume for display ──────────────────────────
         import SimpleITK as _sitk
         volume_np = _sitk.GetArrayFromImage(sitk_img).astype(np.float32)
-        volume_np = np.clip(volume_np, -1000, 3000)
-        volume_np = (volume_np + 1000) / 4000  # Normalise to [0, 1]
+        volume_np = np.clip(volume_np, HU_MIN, HU_MAX)
+        volume_np = (volume_np - HU_MIN) / (HU_MAX - HU_MIN)  # Normalise to [0, 1]
 
         # Store in global state for slider callbacks
         _pipeline_state.update({

@@ -22,7 +22,7 @@ from monai.data import (
 from loguru import logger
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from config import TRAIN_CONFIG, MODEL_CONFIG, HU_MIN, HU_MAX, NUM_CLASSES
+from config import TRAIN_CONFIG, MODEL_CONFIG, HU_MIN, HU_MAX, NUM_CLASSES, TARGET_SPACING
 from src.utils import load_json
 
 
@@ -97,7 +97,7 @@ def get_transforms(mode: str = "train") -> T.Compose:
         # (data is already at 0.4mm, but this guards against any case-level variation)
         T.Spacingd(
             keys       = ["image", "mask"],
-            pixdim     = (0.4, 0.4, 0.4),
+            pixdim     = TARGET_SPACING,
             mode       = ("bilinear", "nearest"),
         ),
 

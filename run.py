@@ -77,7 +77,7 @@ def check_prerequisites() -> bool:
 
     # 3. Check data splits exist (warn only — UI can still run for inference)
     from config import SPLITS_DIR
-    if not (SPLITS_DIR / "manifest.json").exists():
+    if not (SPLITS_DIR / "train.json").exists():
         logger.warning(
             "⚠ Data splits not found. Run preprocessing before training:\n"
             "  python src/preprocessing.py --data_root <path_to_dataset>"
