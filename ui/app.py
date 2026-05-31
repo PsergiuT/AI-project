@@ -507,15 +507,13 @@ def build_ui() -> gr.Blocks:
                                              padding: 16px !important;
                                              display: flex !important; flex-direction: column;
                                              align-self: stretch !important; }
-    #input-col .file-preview-holder svg,
-    #input-col .upload-container svg,
-    #input-col label svg                   { display: none !important; }
-    #input-col .upload-container,
-    #input-col .file-preview-holder        { display: flex !important; flex-direction: column;
+    #dicom-upload svg                       { display: none !important; }
+    #dicom-upload                           { display: flex !important; flex-direction: column;
                                              align-items: center !important; justify-content: center !important;
-                                             text-align: center !important; margin: 0 auto !important; }
-    #input-col .upload-container *,
-    #input-col .file-preview-holder *      { text-align: center !important; }
+                                             margin: 0 auto !important; width: 100% !important; }
+    #dicom-upload *                         { text-align: center !important; }
+    #dicom-upload .upload-container,
+    #dicom-upload .file-preview-holder      { align-items: center !important; justify-content: center !important; }
     footer         { display: none !important; }
     """
 
@@ -551,6 +549,7 @@ def build_ui() -> gr.Blocks:
                     label       = "CBCT Scan (ZIP containing DICOM folder)",
                     file_types  = [".zip"],
                     file_count  = "single",
+                    elem_id     = "dicom-upload",
                 )
 
                 patient_id_box = gr.Textbox(

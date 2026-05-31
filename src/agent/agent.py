@@ -164,7 +164,12 @@ class AEAAgent:
             "model" : AGENT_CONFIG["model_name"],
             "prompt": prompt,
             "stream": False,
-            "options": {"temperature": AGENT_CONFIG["temperature"]},
+            "options": {
+                "temperature": AGENT_CONFIG["temperature"],
+                # Stop before the LLM can hallucinate an Observation — forces it
+                # to yield control back so the real tool result fills that slot.
+                "stop": ["Observation:", "\nObservation"],
+            },
         }).encode()
         req  = urllib.request.Request(
             f"{AGENT_CONFIG['base_url']}/api/generate",
@@ -213,8 +218,14 @@ class AEAAgent:
                 response = self._call_ollama(prompt + scratchpad)
                 logger.info(f"[Iter {iteration+1}] LLM response:\n{response}")
 
-                # Check for Final Answer
-                if "Final Answer:" in response:
+                # Parse Action / Action Input first — if an action is present,
+                # execute it even if "Final Answer:" also appears in the response
+                # (LLM sometimes bundles both in one reply before stop kicks in).
+                action_match = re.search(r"Action:\s*(.+)", response)
+                input_match  = re.search(r"Action Input:\s*(.+)", response)
+
+                # Only treat as Final Answer when there is genuinely no pending action
+                if "Final Answer:" in response and not action_match:
                     output = response.split("Final Answer:")[-1].strip()
                     logger.info(f"Agent completed. Session: {session_id}")
                     return {
@@ -223,10 +234,6 @@ class AEAAgent:
                         "session_id": session_id,
                         "success"   : "ERROR" not in output.upper(),
                     }
-
-                # Parse Action / Action Input
-                action_match = re.search(r"Action:\s*(.+)", response)
-                input_match  = re.search(r"Action Input:\s*(.+)", response)
 
                 if not action_match or not input_match:
                     # LLM didn't follow format — nudge it
