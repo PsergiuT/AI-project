@@ -487,9 +487,9 @@ def build_ui() -> gr.Blocks:
     .panel-header  { font-size: 15px; font-weight: 600; color: #e2e8f0; margin-bottom: 8px; }
     .metric-box    { font-family: monospace; font-size: 13px; }
     .status-bar    { font-size: 14px; font-weight: 500; }
-    .divider       { border: none; border-top: 2px solid #000; margin: 10px 0; }
+    .divider       { border: none; border-top: 3px solid rgba(59,130,246,0.5); margin: 10px 0; }
     .section-title { font-size: 15px; font-weight: 700; text-transform: uppercase;
-                     letter-spacing: 0.05em; border-bottom: 2px solid #000;
+                     letter-spacing: 0.05em; border-bottom: 3px solid rgba(59,130,246,0.5);
                      padding-bottom: 4px; margin-bottom: 8px; }
     footer         { display: none !important; }
     """
@@ -507,7 +507,6 @@ def build_ui() -> gr.Blocks:
             "Upload a CBCT scan, type a natural language instruction, and the AI agent "
             "will automatically segment both the left and right anterior ethmoidal arteries."
         )
-        gr.HTML("<hr style='border:none;border-top:2px solid #000;margin:6px 0;'>")
 
         # ── Status bar ─────────────────────────────────────────────────────────
         status_bar = gr.Textbox(
@@ -516,7 +515,7 @@ def build_ui() -> gr.Blocks:
             interactive = False,
             elem_classes= ["status-bar"],
         )
-        gr.HTML("<hr style='border:none;border-top:2px solid #000;margin:6px 0;'>")
+        gr.HTML("<hr style='border:none;border-top:3px solid rgba(59,130,246,0.5);margin:6px 0;'>")
 
         # ── Main 3-column layout ───────────────────────────────────────────────
         with gr.Row(equal_height=False):
@@ -565,7 +564,7 @@ def build_ui() -> gr.Blocks:
                     size    = "lg",
                 )
 
-                gr.HTML("<hr style='border:none;border-top:1px solid #000;margin:10px 0;'>")
+                gr.HTML("<hr style='border:none;border-top:3px solid rgba(59,130,246,0.5);margin:10px 0;'>")
                 gr.Markdown(
                     "**Model:** SwinUNETR (fine-tuned)  \n"
                     "**Agent:** Llama 3.1 8B via Ollama  \n"
@@ -573,10 +572,10 @@ def build_ui() -> gr.Blocks:
                 )
 
             # ── Vertical divider ───────────────────────────────────────────────
-            gr.HTML("<div style='border-left:2px solid #000;min-height:600px;margin:0 8px;'></div>")
+            gr.HTML("<div style='border-left:3px solid rgba(59,130,246,0.5);min-height:600px;margin:0 8px;'></div>")
 
             # ── CENTRE: Slice viewer ───────────────────────────────────────────
-            with gr.Column(scale=2, min_width=500):
+            with gr.Column(scale=3, min_width=500):
                 gr.HTML("<div class='section-title'>Slice Viewer</div>")
                 gr.Markdown(
                     "_Green = AEA Left · Orange = AEA Right · "
@@ -626,10 +625,10 @@ def build_ui() -> gr.Blocks:
                         )
 
             # ── Vertical divider ───────────────────────────────────────────────
-            gr.HTML("<div style='border-left:2px solid #000;min-height:600px;margin:0 8px;'></div>")
+            gr.HTML("<div style='border-left:3px solid rgba(59,130,246,0.5);min-height:600px;margin:0 8px;'></div>")
 
             # ── RIGHT: Results panel ───────────────────────────────────────────
-            with gr.Column(scale=1, min_width=300):
+            with gr.Column(scale=2, min_width=300):
                 gr.HTML("<div class='section-title'>Results</div>")
 
                 metrics_box = gr.Textbox(
@@ -654,7 +653,7 @@ def build_ui() -> gr.Blocks:
                 )
 
         # ── Bottom divider + Agent reasoning log ───────────────────────────────
-        gr.HTML("<hr style='border:none;border-top:2px solid #000;margin:10px 0;'>")
+        gr.HTML("<hr style='border:none;border-top:3px solid rgba(59,130,246,0.5);margin:10px 0;'>")
         with gr.Accordion("Agent Reasoning Log", open=False):
             gr.Markdown(
                 "This log shows the step-by-step reasoning of the AI agent: "
