@@ -130,7 +130,7 @@ def render_slice(
     # Convert matplotlib figure to PIL Image
     fig.canvas.draw()
     w, h = fig.canvas.get_width_height()
-    buf  = np.frombuffer(fig.canvas.tostring_rgb(), dtype=np.uint8).reshape(h, w, 3)
+    buf  = np.frombuffer(fig.canvas.buffer_rgba(), dtype=np.uint8).reshape(h, w, 4)[:, :, :3]
     plt.close(fig)
     return Image.fromarray(buf)
 
@@ -151,7 +151,7 @@ def render_placeholder() -> Image.Image:
     plt.tight_layout()
     fig.canvas.draw()
     w, h = fig.canvas.get_width_height()
-    buf  = np.frombuffer(fig.canvas.tostring_rgb(), dtype=np.uint8).reshape(h, w, 3)
+    buf  = np.frombuffer(fig.canvas.buffer_rgba(), dtype=np.uint8).reshape(h, w, 4)[:, :, :3]
     plt.close(fig)
     return Image.fromarray(buf)
 
@@ -283,7 +283,7 @@ def run_pipeline_ui(
             return _error_return("Segmentation did not produce a mask. Check logs.")
 
         # ── Reconstruct normalised volume for display ──────────────────────────
-        import SimpleITK as sitk as _sitk
+        import SimpleITK as _sitk
         volume_np = _sitk.GetArrayFromImage(sitk_img).astype(np.float32)
         volume_np = np.clip(volume_np, -1000, 3000)
         volume_np = (volume_np + 1000) / 4000  # Normalise to [0, 1]

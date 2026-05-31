@@ -40,10 +40,6 @@ import re
 from pathlib import Path
 from typing import Optional
 
-from langchain_ollama import ChatOllama
-from langchain.agents import AgentExecutor, create_react_agent
-from langchain_core.prompts import PromptTemplate
-from langchain_core.messages import HumanMessage
 from loguru import logger
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
@@ -93,49 +89,21 @@ Thought: {agent_scratchpad}"""
 
 class AEAAgent:
     """
-    LangChain ReAct agent that orchestrates the AEA segmentation pipeline.
+    ReAct agent that orchestrates the AEA segmentation pipeline.
 
-    The agent uses Llama 3.1 (8B) running locally via Ollama.
-    It interprets natural language instructions and calls the appropriate
-    tools in the correct sequence to produce a segmentation and report.
+    Uses Ollama directly via HTTP — no LangChain AgentExecutor needed.
+    Implements the Thought → Action → Observation loop manually,
+    which makes it compatible with any version of LangChain / langchain-ollama.
     """
 
     def __init__(self):
-        """
-        Initialise the agent with the Ollama LLM and the tool registry.
-
-        Raises:
-            ConnectionError: If Ollama is not running locally.
-        """
         logger.info("Initialising AEA segmentation agent...")
         self._check_ollama()
 
-        self.llm = ChatOllama(
-            model       = AGENT_CONFIG["model_name"],
-            base_url    = AGENT_CONFIG["base_url"],
-            temperature = AGENT_CONFIG["temperature"],
-        )
-
-        self.tools = ALL_TOOLS
-        self.prompt = PromptTemplate.from_template(SYSTEM_PROMPT)
-
-        # Build the ReAct agent
-        react_agent = create_react_agent(
-            llm    = self.llm,
-            tools  = self.tools,
-            prompt = self.prompt,
-        )
-
-        self.executor = AgentExecutor(
-            agent              = react_agent,
-            tools              = self.tools,
-            verbose            = True,        # Print reasoning steps to console
-            max_iterations     = AGENT_CONFIG["max_iterations"],
-            handle_parsing_errors = True,     # Recover from LLM formatting errors
-            return_intermediate_steps = True, # Capture tool call trace for UI
-        )
-
-        logger.info("Agent ready.")
+        # Build a dict for fast tool lookup by name
+        self.tools     = ALL_TOOLS
+        self.tool_map  = {t.name: t for t in ALL_TOOLS}
+        logger.info(f"Agent ready. Tools: {list(self.tool_map.keys())}")
 
     def _check_ollama(self) -> None:
         """Verify that Ollama is running and the required model is available."""
@@ -189,6 +157,23 @@ class AEAAgent:
 
         return base
 
+    def _call_ollama(self, prompt: str) -> str:
+        """Send a prompt to Ollama and return the text response."""
+        import urllib.request, json as _json
+        payload = _json.dumps({
+            "model" : AGENT_CONFIG["model_name"],
+            "prompt": prompt,
+            "stream": False,
+            "options": {"temperature": AGENT_CONFIG["temperature"]},
+        }).encode()
+        req  = urllib.request.Request(
+            f"{AGENT_CONFIG['base_url']}/api/generate",
+            data    = payload,
+            headers = {"Content-Type": "application/json"},
+        )
+        with urllib.request.urlopen(req, timeout=120) as resp:
+            return _json.loads(resp.read())["response"]
+
     def run(
         self,
         instruction  : str,
@@ -197,66 +182,107 @@ class AEAAgent:
         gt_nrrd_path : Optional[str] = None,
     ) -> dict:
         """
-        Run the full segmentation pipeline for a patient case.
+        Run the full segmentation pipeline using a manual ReAct loop.
 
-        Args:
-            instruction:   Natural language instruction from the user.
-            dicom_path:    Path to the DICOM folder.
-            patient_id:    Patient identifier for the report.
-            gt_nrrd_path:  Optional path to ground truth NRRD (enables evaluation).
-
-        Returns:
-            Dict with keys:
-                "output"     : str — Final agent answer (report text).
-                "steps"      : list — [(tool_name, input, output), ...] trace.
-                "session_id" : str | None — Session ID for mask retrieval.
-                "success"    : bool — Whether the pipeline completed without error.
+        Returns dict with keys: output, steps, session_id, success.
         """
         full_instruction = self._build_instruction(
             instruction, dicom_path, patient_id, gt_nrrd_path
         )
-
         logger.info(f"Agent running for patient '{patient_id}'...")
-        logger.info(f"Instruction: {instruction}")
+
+        tool_descriptions = "\n".join(
+            f"- {t.name}: {t.description}" for t in self.tools
+        )
+        tool_names = ", ".join(self.tool_map.keys())
+
+        # Build the initial prompt
+        prompt = SYSTEM_PROMPT.format(
+            tools          = tool_descriptions,
+            tool_names     = tool_names,
+            input          = full_instruction,
+            agent_scratchpad = "",
+        )
+
+        steps      = []
+        session_id = None
+        scratchpad = ""
 
         try:
-            result = self.executor.invoke({"input": full_instruction})
+            for iteration in range(AGENT_CONFIG["max_iterations"]):
+                response = self._call_ollama(prompt + scratchpad)
+                logger.info(f"[Iter {iteration+1}] LLM response:\n{response}")
 
-            # Extract intermediate steps for UI display
-            steps = []
-            for action, observation in result.get("intermediate_steps", []):
+                # Check for Final Answer
+                if "Final Answer:" in response:
+                    output = response.split("Final Answer:")[-1].strip()
+                    logger.info(f"Agent completed. Session: {session_id}")
+                    return {
+                        "output"    : output,
+                        "steps"     : steps,
+                        "session_id": session_id,
+                        "success"   : "ERROR" not in output.upper(),
+                    }
+
+                # Parse Action / Action Input
+                action_match = re.search(r"Action:\s*(.+)", response)
+                input_match  = re.search(r"Action Input:\s*(.+)", response)
+
+                if not action_match or not input_match:
+                    # LLM didn't follow format — nudge it
+                    scratchpad += response + "\nObservation: Please follow the format exactly.\n"
+                    continue
+
+                tool_name  = action_match.group(1).strip()
+                tool_input = input_match.group(1).strip()
+
+                # Call the tool
+                tool = self.tool_map.get(tool_name)
+                if tool is None:
+                    observation = f"ERROR: Unknown tool '{tool_name}'. Available: {tool_names}"
+                else:
+                    try:
+                        observation = tool.invoke(tool_input)
+                        logger.info(f"Tool '{tool_name}' → {str(observation)[:200]}")
+                    except Exception as e:
+                        observation = f"ERROR calling {tool_name}: {e}"
+                        logger.error(observation)
+
+                # Extract session_id from observation if present
+                if session_id is None and "Session ID:" in str(observation):
+                    match = re.search(r"Session ID: ([a-f0-9]+)", str(observation))
+                    if match:
+                        session_id = match.group(1)
+
                 steps.append({
-                    "tool"       : action.tool,
-                    "tool_input" : str(action.tool_input),
+                    "tool"       : tool_name,
+                    "tool_input" : tool_input,
                     "observation": str(observation),
                 })
 
-            # Extract session_id from the tool trace
-            session_id = None
-            for step in steps:
-                if "Session ID:" in step["observation"]:
-                    match = re.search(r"Session ID: ([a-f0-9]+)", step["observation"])
-                    if match:
-                        session_id = match.group(1)
-                        break
+                # Append to scratchpad for next iteration
+                scratchpad += (
+                    f"\nThought: {response.split('Action:')[0].replace('Thought:', '').strip()}"
+                    f"\nAction: {tool_name}"
+                    f"\nAction Input: {tool_input}"
+                    f"\nObservation: {observation}\n"
+                )
 
-            output = result.get("output", "Agent produced no output.")
-            logger.info(f"Agent completed. Session: {session_id}")
-
+            # Max iterations reached without Final Answer
             return {
-                "output"     : output,
-                "steps"      : steps,
-                "session_id" : session_id,
-                "success"    : "ERROR" not in output.upper(),
+                "output"    : "Agent reached max iterations without completing.",
+                "steps"     : steps,
+                "session_id": session_id,
+                "success"   : False,
             }
 
         except Exception as e:
             logger.error(f"Agent error: {e}")
             return {
-                "output"     : f"Pipeline failed: {str(e)}",
-                "steps"      : [],
-                "session_id" : None,
-                "success"    : False,
+                "output"    : f"Pipeline failed: {str(e)}",
+                "steps"     : [],
+                "session_id": None,
+                "success"   : False,
             }
 
     def get_mask(self, session_id: str) -> Optional[object]:
