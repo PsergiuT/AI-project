@@ -249,10 +249,12 @@ class AEAAgent:
                         logger.error(observation)
 
                 # Extract session_id from observation if present
-                if session_id is None and "Session ID:" in str(observation):
-                    match = re.search(r"Session ID: ([a-f0-9]+)", str(observation))
+                # uuid4()[:8] is 8 hex chars, no hyphens — but match generously
+                if "Session ID:" in str(observation):
+                    match = re.search(r"Session ID[:\s'\"]+([a-f0-9\-]{6,36})", str(observation))
                     if match:
-                        session_id = match.group(1)
+                        session_id = match.group(1).strip(" '\"")
+                        logger.info(f"Captured session_id: {session_id}")
 
                 steps.append({
                     "tool"       : tool_name,

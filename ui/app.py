@@ -135,14 +135,14 @@ def render_slice(
     return Image.fromarray(buf)
 
 
-def render_placeholder() -> Image.Image:
-    """Return a placeholder dark image when no scan is loaded."""
+def render_placeholder(message: str = "Upload a CBCT scan\nand click Run Segmentation") -> Image.Image:
+    """Return a placeholder dark image with a given message."""
     fig, ax = plt.subplots(figsize=(6, 6), dpi=100)
     fig.patch.set_facecolor("black")
     ax.set_facecolor("#111111")
     ax.text(
         0.5, 0.5,
-        "Upload a CBCT scan\nand click Run Segmentation",
+        message,
         ha="center", va="center",
         color="#555555", fontsize=13,
         transform=ax.transAxes,
@@ -154,6 +154,11 @@ def render_placeholder() -> Image.Image:
     buf  = np.frombuffer(fig.canvas.buffer_rgba(), dtype=np.uint8).reshape(h, w, 4)[:, :, :3]
     plt.close(fig)
     return Image.fromarray(buf)
+
+
+def render_waiting() -> Image.Image:
+    """Return a placeholder image shown while the agent is running."""
+    return render_placeholder("⏳ Please wait for the agent\nto finish running the\nsegmentation pipeline...")
 
 
 # ── File handling ──────────────────────────────────────────────────────────────
@@ -274,6 +279,12 @@ def run_pipeline_ui(
 
         # ── Retrieve results from session store ────────────────────────────────
         session_id = result["session_id"]
+
+        # Fallback: if regex didn't capture session_id, use the last entry in SESSION_STORE
+        if session_id is None and SESSION_STORE:
+            session_id = list(SESSION_STORE.keys())[-1]
+            logger.warning(f"session_id not captured from agent output — using last session: {session_id}")
+
         session    = SESSION_STORE.get(session_id, {})
         mask       = session.get("clean_mask", session.get("raw_mask"))
         sitk_img   = session.get("sitk_image")
@@ -368,10 +379,10 @@ def _error_return(msg: str) -> tuple:
 
 def _progress_return(msg: str) -> tuple:
     """Return a progress state (used with yield for streaming updates)."""
-    placeholder = render_placeholder()
+    waiting = render_waiting()
     return (
         msg,
-        placeholder, placeholder, placeholder,
+        waiting, waiting, waiting,
         gr.Slider(value=0), gr.Slider(value=0), gr.Slider(value=0),
         "", "", "", None,
         gr.Markdown(visible=True),
@@ -637,14 +648,11 @@ def build_ui() -> gr.Blocks:
 
         # ── Event handlers ─────────────────────────────────────────────────────
 
-        # Show waiting message immediately when Run is clicked
+        # Show waiting image immediately when Run is clicked (before queue picks it up)
         run_btn.click(
-            fn      = lambda: gr.Markdown(
-                value   = "⏳ **Please wait — the agent is running the segmentation pipeline...**",
-                visible = True,
-            ),
+            fn      = lambda: (render_waiting(), render_waiting(), render_waiting()),
             inputs  = [],
-            outputs = [viewer_status],
+            outputs = [axial_img, coronal_img, sagittal_img],
             queue   = False,
         )
 
