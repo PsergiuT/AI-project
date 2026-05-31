@@ -10,7 +10,7 @@ from pathlib import Path
 # ── Paths ──────────────────────────────────────────────────────────────────────
 
 # Root of the raw dataset (the folder containing CROP1 … CROP7)
-DATA_ROOT = Path("../dateArteraEtmoidala")
+DATA_ROOT = Path("../dateArteraEtimoidala")
 
 PROJECT_ROOT   = Path(__file__).parent.resolve()
 DATA_DIR       = PROJECT_ROOT / "data"
@@ -62,31 +62,35 @@ MODEL_CONFIG = {
 TRAIN_CONFIG = {
     # Patch sampling
     "patch_size"       : (96, 96, 96),
-    "num_samples"      : 4,           # Patches per volume per iteration
-    "pos_sample_ratio" : 2,           # 1:1 foreground-to-background patch ratio
+    "num_samples"      : 2,           # 2 patches per volume — safe VRAM at batch_size=2
+    "pos_sample_ratio" : 4,           # 4:1 foreground-to-background — AEA is ~5 voxels wide,
+                                      # aggressively oversample foreground so model sees artery voxels
+                                      # in nearly every patch
     "neg_sample_ratio" : 1,
 
     # DataLoader
-    "batch_size"       : 3,           # L4 has 22.5GB VRAM — batch 2 is safe
-    "num_workers"      : 6,           # Set to 0 on Windows if multiprocessing issues
+    "batch_size"       : 2,           # batch 2 + num_samples 2 targets ~16-17 GB VRAM
+    "num_workers"      : 6,           # PersistentDataset cache is on disk — 6 workers is safe
 
     # Optimiser
-    "learning_rate"    : 3e-4,
-    "weight_decay"     : 5e-5,
+    "learning_rate"    : 1e-4,        # Standard starting LR for fine-tuning from pretrained weights
+    "weight_decay"     : 1e-5,
 
     # Scheduler
-    "max_epochs"       : 800,
-    "warmup_epochs"    : 10,          # Linear warmup before cosine annealing
+    "max_epochs"       : 1000,        # More epochs — AEA is hard, needs time to converge
+    "warmup_epochs"    : 20,          # Longer warmup protects pretrained encoder from large early updates
 
     # Early stopping
-    "patience"         : 80,         # Stop if val Dice doesn't improve for 50 epochs
+    "patience"         : 100,         # With val_every=10 this means 10 validation checks (100 epochs)
+                                      # without improvement before stopping — gives model room to plateau
+                                      # and recover before giving up
 
     # Validation frequency
-    "val_every"        : 15,          # Run validation every N epochs
+    "val_every"        : 10,          # Run validation every 10 epochs
 
     # Loss
-    "dice_weight"      : 1.5,        # Weight for Dice component of DiceCELoss
-    "ce_weight"        : 1.0,        # Weight for Cross-Entropy component
+    "dice_weight"      : 2.0,         # Prioritise Dice loss — directly optimises the metric we care about
+    "ce_weight"        : 1.0,         # CE guides class boundaries, keep at 1.0
 
     # Checkpointing
     "checkpoint_dir"   : str(SWINUNETR_DIR),
@@ -96,14 +100,14 @@ TRAIN_CONFIG = {
     # Fine-tuning from a trained checkpoint
     # Lower LR avoids disrupting already-learned features while still
     # allowing the network to adapt to the improved loss and transforms.
-    "finetune_lr"      : 5e-5,
+    "finetune_lr"      : 1e-5,
 }
 
 # ── Inference ──────────────────────────────────────────────────────────────────
 
 INFERENCE_CONFIG = {
-    "sw_batch_size"  : 6,           # Sliding window batch size (L4 has enough VRAM)
-    "overlap"        : 0.75,         # Overlap fraction between adjacent windows
+    "sw_batch_size"  : 4,           # Validation only (no gradients) — 4 is safe
+    "overlap"        : 0.5,          # Overlap fraction between adjacent windows
     "mode"           : "gaussian",  # Blending mode for overlapping predictions
     "roi_size"       : (96, 96, 96),
 }
