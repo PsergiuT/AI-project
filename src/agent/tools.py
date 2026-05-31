@@ -61,9 +61,11 @@ def _get_model():
         use_checkpoint = False,
     )
     try:
-        model = SwinUNETR(img_size=MODEL_CONFIG["img_size"], **_kwargs).to(device)
+        # MONAI 1.4+: img_size removed from signature
+        model = SwinUNETR(**_kwargs).to(device)
     except TypeError:
-        model = SwinUNETR(MODEL_CONFIG["img_size"], **_kwargs).to(device)
+        # MONAI 1.3.x fallback
+        model = SwinUNETR(img_size=MODEL_CONFIG["img_size"], **_kwargs).to(device)
 
     best_ckpt = SWINUNETR_DIR / TRAIN_CONFIG["best_model_name"]
     if not best_ckpt.exists():

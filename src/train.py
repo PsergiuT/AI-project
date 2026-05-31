@@ -80,7 +80,8 @@ def build_model(device: str, pretrained: bool = True) -> SwinUNETR:
     # Build SwinUNETR with API compatibility across MONAI versions.
     # MONAI 1.3.x uses 'img_size' as a keyword argument.
     # MONAI 1.4+ changed the signature — img_size must be passed positionally.
-    # We try keyword first, then fall back to positional if it fails.
+    # MONAI 1.4+ removed img_size entirely — in_channels is now the first arg.
+    # Try without img_size first (1.4+), fall back to passing it as keyword (1.3.x).
     _kwargs = dict(
         in_channels    = MODEL_CONFIG["in_channels"],
         out_channels   = MODEL_CONFIG["out_channels"],
@@ -88,15 +89,14 @@ def build_model(device: str, pretrained: bool = True) -> SwinUNETR:
         use_checkpoint = MODEL_CONFIG["use_checkpoint"],
     )
     try:
+        # MONAI 1.4+: img_size not needed, removed from signature
+        model = SwinUNETR(**_kwargs).to(device)
+        logger.info("SwinUNETR built without img_size (MONAI 1.4+)")
+    except TypeError:
+        # MONAI 1.3.x: img_size required as keyword argument
+        logger.info("Falling back to img_size keyword (MONAI 1.3.x)")
         model = SwinUNETR(
             img_size = MODEL_CONFIG["img_size"],
-            **_kwargs,
-        ).to(device)
-    except TypeError:
-        # Newer MONAI: img_size is positional-only
-        logger.info("MONAI API change detected — passing img_size positionally.")
-        model = SwinUNETR(
-            MODEL_CONFIG["img_size"],
             **_kwargs,
         ).to(device)
 
