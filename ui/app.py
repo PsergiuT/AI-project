@@ -484,13 +484,29 @@ def build_ui() -> gr.Blocks:
     """Build and return the Gradio Blocks dashboard."""
 
     custom_css = """
-    .panel-header  { font-size: 15px; font-weight: 600; color: #e2e8f0; margin-bottom: 8px; }
+    .panel-header  { font-size: 15px; font-weight: 600; margin-bottom: 8px; }
     .metric-box    { font-family: monospace; font-size: 13px; }
     .status-bar    { font-size: 14px; font-weight: 500; }
-    .divider       { border: none; border-top: 3px solid rgba(59,130,246,0.5); margin: 10px 0; }
     .section-title { font-size: 15px; font-weight: 700; text-transform: uppercase;
-                     letter-spacing: 0.05em; border-bottom: 3px solid rgba(59,130,246,0.5);
-                     padding-bottom: 4px; margin-bottom: 8px; }
+                     letter-spacing: 0.05em; padding-bottom: 4px; margin-bottom: 8px; }
+
+    /* ── Islands ── */
+    #header-box, #log-box                  { background: #eaf2ff !important; border-radius: 14px !important;
+                                             border: none !important; box-shadow: none !important;
+                                             padding: 16px !important; margin: 6px 0 !important; }
+    #header-box > *, #log-box > *,
+    #header-box > * > *, #log-box > * > *  { background: transparent !important; border: none !important;
+                                             box-shadow: none !important; border-radius: 0 !important; }
+
+    #main-row                              { background: transparent !important; border: none !important;
+                                             padding: 0 !important; margin: 6px 0 !important;
+                                             gap: 12px !important;
+                                             display: flex !important; align-items: stretch !important; }
+    #input-col, #viewer-col, #results-col  { background: #eaf2ff !important; border-radius: 14px !important;
+                                             border: none !important; box-shadow: none !important;
+                                             padding: 16px !important;
+                                             display: flex !important; flex-direction: column;
+                                             align-self: stretch !important; }
     footer         { display: none !important; }
     """
 
@@ -500,28 +516,26 @@ def build_ui() -> gr.Blocks:
         css     = custom_css,
     ) as demo:
 
-        # ── Header ─────────────────────────────────────────────────────────────
-        gr.Markdown("# Anterior Ethmoidal Artery Segmentation")
-        gr.Markdown(
-            "**AI-assisted preoperative localization of the AEA on CBCT scans.** "
-            "Upload a CBCT scan, type a natural language instruction, and the AI agent "
-            "will automatically segment both the left and right anterior ethmoidal arteries."
-        )
-
-        # ── Status bar ─────────────────────────────────────────────────────────
-        status_bar = gr.Textbox(
-            value       = "Ready. Upload a CBCT scan to begin.",
-            label       = "Status",
-            interactive = False,
-            elem_classes= ["status-bar"],
-        )
-        gr.HTML("<hr style='border:none;border-top:3px solid rgba(59,130,246,0.5);margin:6px 0;'>")
+        # ── Header + status box ────────────────────────────────────────────────
+        with gr.Group(elem_id="header-box"):
+            gr.Markdown("# Anterior Ethmoidal Artery Segmentation")
+            gr.Markdown(
+                "**AI-assisted preoperative localization of the AEA on CBCT scans.** "
+                "Upload a CBCT scan, type a natural language instruction, and the AI agent "
+                "will automatically segment both the left and right anterior ethmoidal arteries."
+            )
+            status_bar = gr.Textbox(
+                value       = "Ready. Upload a CBCT scan to begin.",
+                label       = "Status",
+                interactive = False,
+                elem_classes= ["status-bar"],
+            )
 
         # ── Main 3-column layout ───────────────────────────────────────────────
-        with gr.Row(equal_height=False):
+        with gr.Row(equal_height=False, elem_id="main-row"):
 
             # ── LEFT: Input panel ──────────────────────────────────────────────
-            with gr.Column(scale=1, min_width=280):
+            with gr.Column(scale=1, min_width=280, elem_id="input-col"):
                 gr.HTML("<div class='section-title'>Input</div>")
 
                 dicom_upload = gr.File(
@@ -571,11 +585,8 @@ def build_ui() -> gr.Blocks:
                     "**Dataset:** 130 CBCT cases"
                 )
 
-            # ── Vertical divider ───────────────────────────────────────────────
-            gr.HTML("<div style='border-left:3px solid rgba(59,130,246,0.5);min-height:600px;margin:0 8px;'></div>")
-
             # ── CENTRE: Slice viewer ───────────────────────────────────────────
-            with gr.Column(scale=3, min_width=500):
+            with gr.Column(scale=3, min_width=500, elem_id="viewer-col"):
                 gr.HTML("<div class='section-title'>Slice Viewer</div>")
                 gr.Markdown(
                     "_Green = AEA Left · Orange = AEA Right · "
@@ -624,17 +635,14 @@ def build_ui() -> gr.Blocks:
                             label   = "Sagittal slice (X)",
                         )
 
-            # ── Vertical divider ───────────────────────────────────────────────
-            gr.HTML("<div style='border-left:3px solid rgba(59,130,246,0.5);min-height:600px;margin:0 8px;'></div>")
-
             # ── RIGHT: Results panel ───────────────────────────────────────────
-            with gr.Column(scale=2, min_width=300):
+            with gr.Column(scale=2, min_width=300, elem_id="results-col"):
                 gr.HTML("<div class='section-title'>Results</div>")
 
                 metrics_box = gr.Textbox(
                     label       = "Segmentation Metrics",
                     value       = "Metrics will appear here after segmentation.",
-                    lines       = 12,
+                    lines       = 6,
                     interactive = False,
                     elem_classes= ["metric-box"],
                 )
@@ -642,7 +650,7 @@ def build_ui() -> gr.Blocks:
                 report_box = gr.Textbox(
                     label       = "Clinical Report",
                     value       = "Report will appear here after segmentation.",
-                    lines       = 18,
+                    lines       = 9,
                     interactive = False,
                     elem_classes= ["metric-box"],
                 )
@@ -652,20 +660,20 @@ def build_ui() -> gr.Blocks:
                     interactive = False,
                 )
 
-        # ── Bottom divider + Agent reasoning log ───────────────────────────────
-        gr.HTML("<hr style='border:none;border-top:3px solid rgba(59,130,246,0.5);margin:10px 0;'>")
-        with gr.Accordion("Agent Reasoning Log", open=False):
-            gr.Markdown(
-                "This log shows the step-by-step reasoning of the AI agent: "
-                "which tools it called, in what order, and what each tool returned."
-            )
-            agent_log_box = gr.Textbox(
-                label       = "Agent Trace (Thought → Action → Observation)",
-                value       = "Agent log will appear here after segmentation.",
-                lines       = 15,
-                interactive = False,
-                elem_classes= ["metric-box"],
-            )
+        # ── Agent reasoning log ────────────────────────────────────────────────
+        with gr.Group(elem_id="log-box"):
+            with gr.Accordion("Agent Reasoning Log", open=False):
+                gr.Markdown(
+                    "This log shows the step-by-step reasoning of the AI agent: "
+                    "which tools it called, in what order, and what each tool returned."
+                )
+                agent_log_box = gr.Textbox(
+                    label       = "Agent Trace (Thought → Action → Observation)",
+                    value       = "Agent log will appear here after segmentation.",
+                    lines       = 15,
+                    interactive = False,
+                    elem_classes= ["metric-box"],
+                )
 
         # ── Event handlers ─────────────────────────────────────────────────────
 
