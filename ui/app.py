@@ -244,7 +244,8 @@ def run_pipeline_ui(
 
         if not dicom_dir:
             shutil.rmtree(tmp_dir, ignore_errors=True)
-            return _error_return("No DICOM (.dcm) files found in the uploaded archive.")
+            yield _error_return("No DICOM (.dcm) files found in the uploaded archive.")
+            return
 
         gt_path = None
         if use_gt:
@@ -268,7 +269,8 @@ def run_pipeline_ui(
 
         if not result["success"]:
             shutil.rmtree(tmp_dir, ignore_errors=True)
-            return _error_return(f"Pipeline error: {result['output']}")
+            yield _error_return(f"Pipeline error: {result['output']}")
+            return
 
         # ── Retrieve results from session store ────────────────────────────────
         session_id = result["session_id"]
@@ -280,7 +282,8 @@ def run_pipeline_ui(
 
         if mask is None:
             shutil.rmtree(tmp_dir, ignore_errors=True)
-            return _error_return("Segmentation did not produce a mask. Check logs.")
+            yield _error_return("Segmentation did not produce a mask. Check logs.")
+            return
 
         # ── Reconstruct normalised volume for display ──────────────────────────
         import SimpleITK as _sitk
@@ -342,12 +345,13 @@ def run_pipeline_ui(
             report_text,
             agent_log,
             report_json_path,
+            gr.Markdown(visible=False),
         )
 
     except Exception as e:
         shutil.rmtree(tmp_dir, ignore_errors=True)
         logger.error(f"UI pipeline error: {e}")
-        return _error_return(f"Unexpected error: {str(e)}")
+        yield _error_return(f"Unexpected error: {str(e)}")
 
 
 def _error_return(msg: str) -> tuple:
@@ -358,6 +362,7 @@ def _error_return(msg: str) -> tuple:
         placeholder, placeholder, placeholder,
         gr.Slider(value=0), gr.Slider(value=0), gr.Slider(value=0),
         "No metrics available.", msg, "No agent log.", None,
+        gr.Markdown(visible=False),
     )
 
 
@@ -369,6 +374,7 @@ def _progress_return(msg: str) -> tuple:
         placeholder, placeholder, placeholder,
         gr.Slider(value=0), gr.Slider(value=0), gr.Slider(value=0),
         "", "", "", None,
+        gr.Markdown(visible=True),
     )
 
 
@@ -540,6 +546,11 @@ def build_ui() -> gr.Blocks:
                     "Use sliders to navigate slices_"
                 )
 
+                viewer_status = gr.Markdown(
+                    value   = "",
+                    visible = False,
+                )
+
                 with gr.Tabs():
                     with gr.Tab("Axial"):
                         axial_img    = gr.Image(
@@ -626,6 +637,17 @@ def build_ui() -> gr.Blocks:
 
         # ── Event handlers ─────────────────────────────────────────────────────
 
+        # Show waiting message immediately when Run is clicked
+        run_btn.click(
+            fn      = lambda: gr.Markdown(
+                value   = "⏳ **Please wait — the agent is running the segmentation pipeline...**",
+                visible = True,
+            ),
+            inputs  = [],
+            outputs = [viewer_status],
+            queue   = False,
+        )
+
         # Run button → full pipeline
         run_btn.click(
             fn      = run_pipeline_ui,
@@ -638,7 +660,9 @@ def build_ui() -> gr.Blocks:
                 axial_img, coronal_img, sagittal_img,
                 axial_slider, coronal_slider, sagittal_slider,
                 metrics_box, report_box, agent_log_box, report_download,
+                viewer_status,
             ],
+            queue   = True,
         )
 
         # Slice sliders → update individual views
@@ -667,6 +691,7 @@ def launch(share: bool = False, port: int = 7860) -> None:
     """Launch the Gradio dashboard."""
     demo = build_ui()
     logger.info(f"Launching AEA Segmentation dashboard on port {port}...")
+    demo.queue()
     demo.launch(
         server_name = "0.0.0.0",
         server_port = port,
