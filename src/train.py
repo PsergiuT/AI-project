@@ -14,6 +14,7 @@ Run on Google Colab (recommended) or locally with a CUDA GPU:
 For Colab, use the provided notebook: notebooks/training.ipynb
 """
 
+import os
 import sys
 import time
 import argparse
@@ -253,13 +254,15 @@ def train(
     #   AEA Left   (1) → 1.0
     #   AEA Right  (2) → 1.0
     # The Dice component is naturally balanced because it operates per-class.
-    ce_weights = torch.tensor([0.1, 1.0, 1.0], dtype=torch.float32, device=device)
+    # Aggressive downweighting of background forces the network to focus
+    # almost entirely on the rare AEA voxels during CE loss computation.
+    ce_weights = torch.tensor([0.1, 1.5, 1.5], dtype=torch.float32, device=device)
     loss_fn = DiceCELoss(
         to_onehot_y   = True,    # Convert integer labels to one-hot internally
         softmax       = True,    # Apply softmax to logits before loss
         lambda_dice   = TRAIN_CONFIG["dice_weight"],
         lambda_ce     = TRAIN_CONFIG["ce_weight"],
-        ce_weight     = ce_weights,
+        weight        = ce_weights,  # CE class weights (MONAI 1.4 uses 'weight')
     )
 
     # ── Optimiser & scheduler ──────────────────────────────────────────────────

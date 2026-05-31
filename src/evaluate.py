@@ -60,26 +60,31 @@ class SegmentationMetrics:
         self.n_classes     = NUM_CLASSES
 
         # MONAI metric objects — include_background=False excludes class 0
+        # (EVAL_CONFIG["include_background"] is False, so we pass False directly)
         self.dice_metric = DiceMetric(
-            include_background = not EVAL_CONFIG["include_background"],
+            include_background = EVAL_CONFIG["include_background"],
             reduction          = "mean_batch",
             get_not_nans       = True,
         )
         self.iou_metric = MeanIoU(
-            include_background = not EVAL_CONFIG["include_background"],
+            include_background = EVAL_CONFIG["include_background"],
             reduction          = "mean_batch",
             get_not_nans       = True,
         )
         self.hd95_metric = HausdorffDistanceMetric(
-            include_background = not EVAL_CONFIG["include_background"],
+            include_background = EVAL_CONFIG["include_background"],
             percentile         = EVAL_CONFIG["percentile"],
             reduction          = "mean_batch",
             get_not_nans       = True,
         )
 
         # One-hot converters
-        self.post_pred  = AsDiscrete(argmax=True,  to_onehot=NUM_CLASSES)
-        self.post_label = AsDiscrete(threshold=0.5, to_onehot=NUM_CLASSES)
+        # post_pred : logits → argmax class index → one-hot
+        # post_label: integer labels (0,1,2) → one-hot directly
+        #             NO threshold here — threshold=0.5 would collapse labels 1
+        #             and 2 both into channel 1, making AEA Right invisible to metrics
+        self.post_pred  = AsDiscrete(argmax=True, to_onehot=NUM_CLASSES)
+        self.post_label = AsDiscrete(to_onehot=NUM_CLASSES)
 
     # ── Conversion helpers ─────────────────────────────────────────────────────
 
