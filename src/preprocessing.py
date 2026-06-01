@@ -35,7 +35,7 @@ from config import (
 from src.utils import build_manifest, split_manifest, save_json, setup_logger, set_seed
 
 
-# ── DICOM loading ──────────────────────────────────────────────────────────────
+# DICOM loading
 
 def load_dicom_series(dicom_dir: Path) -> sitk.Image:
     """
@@ -112,7 +112,7 @@ def load_dicom_series(dicom_dir: Path) -> sitk.Image:
     return sitk_image
 
 
-# ── NRRD mask loading ──────────────────────────────────────────────────────────
+# NRRD mask loading
 
 def load_nrrd_mask(nrrd_path: Path) -> sitk.Image:
     """
@@ -150,7 +150,7 @@ def load_nrrd_mask(nrrd_path: Path) -> sitk.Image:
     return sitk_mask
 
 
-# ── Resampling ─────────────────────────────────────────────────────────────────
+# Resampling
 
 def resample_mask_to_image(
     mask: sitk.Image,
@@ -178,7 +178,7 @@ def resample_mask_to_image(
     return resampler.Execute(mask)
 
 
-# ── Per-case processing ────────────────────────────────────────────────────────
+# Per-case processing
 
 def process_case(
     case_id    : str,
