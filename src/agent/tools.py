@@ -42,7 +42,7 @@ from config import (
 from src.postprocess import full_postprocess
 from src.report import generate_report, report_to_text
 
-# ── Lazy model loader ──────────────────────────────────────────────────────────
+# ── Lazy model loader ──
 # The model is loaded once and reused across all tool calls in the session.
 _model_cache: dict = {"model": None, "device": None}
 
@@ -85,7 +85,7 @@ def _get_model():
     return model, device
 
 
-# ── Session store ──────────────────────────────────────────────────────────────
+# ── Session store ──
 # Holds intermediate pipeline results keyed by session_id.
 # Structure per session:
 #   {
@@ -133,7 +133,7 @@ def _parse_session_id(raw: str) -> str:
     return cleaned
 
 
-# ── Tool 1 — Load and preprocess ──────────────────────────────────────────────
+# ── Tool 1 — Load and preprocess ──
 
 @tool
 def load_and_preprocess(dicom_path: str) -> str:
@@ -209,7 +209,7 @@ def load_and_preprocess(dicom_path: str) -> str:
         return f"ERROR in load_and_preprocess: {str(e)}"
 
 
-# ── Tool 2 — Run segmentation ─────────────────────────────────────────────────
+# ── Tool 2 — Run segmentation ──
 
 @tool
 def run_segmentation(session_id: str) -> str:
@@ -279,7 +279,7 @@ def run_segmentation(session_id: str) -> str:
         return f"ERROR in run_segmentation: {str(e)}"
 
 
-# ── Tool 3 — Post-process ─────────────────────────────────────────────────────
+# ── Tool 3 — Post-process ───
 
 @tool
 def postprocess_segmentation(session_id: str) -> str:
@@ -336,7 +336,7 @@ def postprocess_segmentation(session_id: str) -> str:
         return f"ERROR in postprocess_segmentation: {str(e)}"
 
 
-# ── Tool 4 — Evaluate (optional, requires ground truth) ───────────────────────
+# ── Tool 4 — Evaluate (optional, requires ground truth) ──
 
 @tool
 def evaluate_segmentation(session_id: str, gt_nrrd_path: str) -> str:
@@ -445,7 +445,7 @@ def evaluate_segmentation(session_id: str, gt_nrrd_path: str) -> str:
         return f"ERROR in evaluate_segmentation: {str(e)}"
 
 
-# ── Tool 5 — Generate report ──────────────────────────────────────────────────
+# ── Tool 5 — Generate report ──
 
 @tool
 def generate_final_report(session_id: str, patient_id: str = "unknown") -> str:
@@ -504,7 +504,7 @@ def generate_final_report(session_id: str, patient_id: str = "unknown") -> str:
         return f"ERROR in generate_final_report: {str(e)}"
 
 
-# ── Tool registry ──────────────────────────────────────────────────────────────
+# ── Tool registry ──
 
 ALL_TOOLS = [
     load_and_preprocess,
