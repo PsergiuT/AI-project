@@ -5,7 +5,7 @@ from pathlib import Path
 from loguru import logger
 
 
-# ── Reproducibility ────────────────────────────────────────────────────────────
+# ── Reproducibility ───
 
 def set_seed(seed: int = 42) -> None:
     """Set random seeds for Python, NumPy, and PyTorch for reproducibility."""
