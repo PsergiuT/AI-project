@@ -240,7 +240,7 @@ def process_case(
         return None
 
 
-# ── Dataset discovery ──────────────────────────────────────────────────────────
+# Dataset discovery
 
 def discover_cases(data_root: Path) -> list[tuple[str, Path, Path]]:
     """
@@ -300,7 +300,7 @@ def discover_cases(data_root: Path) -> list[tuple[str, Path, Path]]:
     return cases
 
 
-# ── Main ───────────────────────────────────────────────────────────────────────
+# Main
 
 def main(data_root: Path, output_dir: Path) -> None:
     set_seed(RANDOM_SEED)

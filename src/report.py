@@ -25,7 +25,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from config import CLASS_NAMES, TARGET_SPACING
 
 
-# ── Volume computation ─────────────────────────────────────────────────────────
+# Volume computation
 
 def compute_volumes(mask: np.ndarray, voxel_spacing_mm: tuple = TARGET_SPACING) -> dict:
     """
@@ -51,7 +51,7 @@ def compute_volumes(mask: np.ndarray, voxel_spacing_mm: tuple = TARGET_SPACING) 
     }
 
 
-# ── Clinical interpretation ────────────────────────────────────────────────────
+# Clinical interpretation
 
 def interpret_dice(dice: float, side: str) -> str:
     """
@@ -134,7 +134,7 @@ def detect_anatomical_findings(mask: np.ndarray) -> dict:
     return findings
 
 
-# ── Main report generator ──────────────────────────────────────────────────────
+# Main report generator
 
 def generate_report(
     case_id       : str,
