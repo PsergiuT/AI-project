@@ -170,7 +170,7 @@ The used model has a better performance (Dice: 0.28), but I managed to capture o
 
 ## Demo
 
-https://1drv.ms/v/c/6850d30f0c4c5902/IQAO_rkUNe-zS6711hRKKcL3AVZZVmZxw1mF5fdEpjBf0fI?e=Nzm0pR
+https://youtu.be/6bYxFNadpJo
 
 
 ## Bibliography
