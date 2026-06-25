@@ -26,7 +26,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from config import LABEL_AEA_LEFT, LABEL_AEA_RIGHT, LABEL_BACKGROUND
 
 
-# ── Core CCA function ──────────────────────────────────────────────────────────
+# ── Core CCA function ──
 
 def keep_largest_component(
     binary_mask   : np.ndarray,
@@ -109,7 +109,7 @@ def remove_small_components(
     return cleaned
 
 
-# ── Full mask post-processing ──────────────────────────────────────────────────
+# ── Full mask post-processing ──
 
 def postprocess_mask(
     pred_mask       : np.ndarray | torch.Tensor,
@@ -166,7 +166,7 @@ def postprocess_mask(
     return cleaned
 
 
-# ── Morphological smoothing (optional) ────────────────────────────────────────
+# ── Morphological smoothing (optional) ──
 
 def smooth_mask(
     pred_mask    : np.ndarray,

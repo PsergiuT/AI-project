@@ -30,7 +30,7 @@ from monai.losses import DiceCELoss
 from monai.inferers import sliding_window_inference
 from loguru import logger
 
-# ── PyTorch 2.6 compatibility patch ───────────────────────────────────────────
+# ── PyTorch 2.6 compatibility patch
 # PyTorch 2.6 changed torch.load to default weights_only=True for security.
 # MONAI's PersistentDataset calls torch.load internally (no weights_only arg)
 # to read its disk cache, which contains MetaTensor + numpy objects that are
@@ -53,7 +53,7 @@ from src.evaluate import SegmentationMetrics
 from src.utils import set_seed, setup_logger, save_json
 
 
-# ── Pre-trained weights URL ────────────────────────────────────────────────────
+# ── Pre-trained weights URL
 
 PRETRAINED_WEIGHTS_URL = (
     "https://github.com/Project-MONAI/MONAI-extra-test-data/releases/download/"
@@ -61,7 +61,7 @@ PRETRAINED_WEIGHTS_URL = (
 )
 
 
-# ── Model initialisation ───────────────────────────────────────────────────────
+# ── Model initialisation
 
 def build_model(device: str, pretrained: bool = True) -> SwinUNETR:
     """
