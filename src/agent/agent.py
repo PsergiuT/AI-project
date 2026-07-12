@@ -47,7 +47,7 @@ from config import AGENT_CONFIG
 from src.agent.tools import ALL_TOOLS, SESSION_STORE
 
 
-# ── System prompt ──────────────────────────────────────────────────────────────
+# ── System prompt ──
 
 SYSTEM_PROMPT = """You are an AI assistant specialized in medical image analysis, specifically for
 segmenting the Anterior Ethmoidal Artery (AEA) in CBCT scans for preoperative surgical planning.
@@ -85,7 +85,7 @@ Question: {input}
 Thought: {agent_scratchpad}"""
 
 
-# ── Agent class ────────────────────────────────────────────────────────────────
+# ── Agent class ──
 
 class AEAAgent:
     """
@@ -326,7 +326,7 @@ class AEAAgent:
         return session.get("report")
 
 
-# ── Convenience function ───────────────────────────────────────────────────────
+# ── Convenience function ──
 
 def run_pipeline(
     dicom_path   : str,
